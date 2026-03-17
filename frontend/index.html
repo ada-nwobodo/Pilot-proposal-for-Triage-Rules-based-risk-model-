@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Clinical Risk Stratification — Triage NLP Engine</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+
+  <!-- Page Header -->
+  <header class="page-header">
+    <div>
+      <h1>Clinical Risk Stratification</h1>
+      <p class="subtitle">Triage NLP Engine &mdash; Rules-based risk assessment from free-text notes</p>
+    </div>
+    <span class="header-badge">Synthetic Demo</span>
+  </header>
+
+  <main class="main-container">
+
+    <form id="risk-form" novalidate>
+      <div class="input-grid">
+
+        <!-- Left panel: clinical note -->
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">Clinical Note</span>
+          </div>
+          <div class="card-body">
+            <label for="note-text">Free-text note</label>
+            <textarea
+              id="note-text"
+              name="note_text"
+              placeholder="Enter the clinical note here, e.g.: Patient presents with sudden onset severe chest pain radiating to the left arm, associated with diaphoresis and shortness of breath..."
+              spellcheck="false"
+              required
+            ></textarea>
+
+            <div class="form-actions">
+              <button type="submit" id="submit-btn" class="btn btn-primary">
+                Analyse Risk
+              </button>
+              <button type="button" id="load-example-btn" class="btn btn-secondary">
+                Load Example
+              </button>
+              <button type="button" id="clear-btn" class="btn btn-secondary">
+                Clear
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right panel: vital signs -->
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">Vital Signs</span>
+          </div>
+          <div class="card-body">
+            <p style="font-size:0.8125rem;color:var(--color-text-muted);margin-bottom:1rem;">
+              All fields optional. Leave blank if not recorded.
+            </p>
+            <div class="vitals-grid">
+
+              <div class="form-field">
+                <label for="heart-rate">Heart Rate</label>
+                <input type="number" id="heart-rate" name="heart_rate"
+                       placeholder="72" min="0" max="300" step="1" />
+                <span class="unit">bpm</span>
+              </div>
+
+              <div class="form-field">
+                <label for="systolic-bp">Systolic BP</label>
+                <input type="number" id="systolic-bp" name="systolic_bp"
+                       placeholder="120" min="0" max="300" step="1" />
+                <span class="unit">mmHg</span>
+              </div>
+
+              <div class="form-field">
+                <label for="diastolic-bp">Diastolic BP</label>
+                <input type="number" id="diastolic-bp" name="diastolic_bp"
+                       placeholder="80" min="0" max="200" step="1" />
+                <span class="unit">mmHg</span>
+              </div>
+
+              <div class="form-field">
+                <label for="respiratory-rate">Resp. Rate</label>
+                <input type="number" id="respiratory-rate" name="respiratory_rate"
+                       placeholder="16" min="0" max="60" step="1" />
+                <span class="unit">breaths/min</span>
+              </div>
+
+              <div class="form-field">
+                <label for="spo2">SpO2</label>
+                <input type="number" id="spo2" name="spo2"
+                       placeholder="98" min="50" max="100" step="1" />
+                <span class="unit">%</span>
+              </div>
+
+              <div class="form-field">
+                <label for="temperature">Temperature</label>
+                <input type="number" id="temperature" name="temperature"
+                       placeholder="37.0" min="30" max="45" step="0.1" />
+                <span class="unit">&deg;C</span>
+              </div>
+
+              <div class="form-field">
+                <label for="gcs">GCS</label>
+                <input type="number" id="gcs" name="gcs"
+                       placeholder="15" min="3" max="15" step="1" />
+                <span class="unit">3&ndash;15</span>
+              </div>
+
+            </div>
+          </div>
+        </div>
+
+      </div><!-- /input-grid -->
+    </form>
+
+    <!-- Error display -->
+    <div id="error-box" class="error-box" role="alert"></div>
+
+    <!-- Results -->
+    <section id="results-section" class="results-hidden">
+
+      <div class="card" style="margin-top: 0;">
+        <div class="card-header">
+          <span class="card-title">Assessment Result</span>
+          <span id="processing-time" class="perf-info" title="Server-side processing time"></span>
+        </div>
+        <div class="card-body">
+
+          <!-- Risk badge + scores -->
+          <div class="result-summary">
+            <div id="risk-badge" class="risk-badge">—</div>
+
+            <span class="score-pill">
+              Combined score: <strong id="combined-score">—</strong>
+            </span>
+            <span class="score-pill">
+              Entity score: <strong id="entity-score">—</strong>
+            </span>
+            <span class="score-pill">
+              Vitals points: <strong id="vitals-score">—</strong>
+            </span>
+          </div>
+
+          <!-- Override banner (hidden unless override triggered) -->
+          <div id="override-banner" class="override-banner" style="display:none;"></div>
+
+          <!-- Reasoning -->
+          <div id="reasoning-text" class="reasoning-box"></div>
+
+          <!-- Entity contributions -->
+          <p class="section-title">Entity Contributions</p>
+          <table class="entity-table">
+            <thead>
+              <tr>
+                <th>Entity</th>
+                <th>Type</th>
+                <th>Severity</th>
+                <th>Score</th>
+              </tr>
+            </thead>
+            <tbody id="entity-table-body"></tbody>
+          </table>
+          <p id="empty-entities" style="display:none;font-size:0.875rem;color:var(--color-text-muted);margin-top:0.5rem;">
+            No clinical entities detected.
+          </p>
+
+          <!-- Vitals flags -->
+          <p class="section-title">Vital Sign Flags</p>
+          <ul id="vitals-flags-list" class="vitals-flags-list"></ul>
+          <p id="empty-vitals" style="display:none;font-size:0.875rem;color:var(--color-text-muted);margin-top:0.5rem;">
+            No vital sign abnormalities detected or no vitals provided.
+          </p>
+
+        </div>
+      </div>
+
+    </section><!-- /results-section -->
+
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
