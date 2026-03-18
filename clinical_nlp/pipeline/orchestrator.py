@@ -38,6 +38,4 @@ class ClinicalRiskOrchestrator:
             entities=entities,
             vitals_score=vitals_score,
             patient_id=clinical_input.patient_id,
-            entity_weight=self.settings.entity_weight,
-            vitals_weight=self.settings.vitals_weight,
         )

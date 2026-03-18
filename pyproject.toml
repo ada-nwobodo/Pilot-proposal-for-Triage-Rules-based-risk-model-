@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "clinical-risk-engine"
 version = "0.1.0"
 description = "Rules-based clinical NLP risk stratification engine"
-requires-python = ">=3.11"
+requires-python = ">=3.9"
 dependencies = [
     "spacy>=3.7,<4.0",
     "fastapi>=0.111",

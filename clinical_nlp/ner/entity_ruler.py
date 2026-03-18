@@ -1,102 +1,166 @@
 from __future__ import annotations
 import spacy
 from spacy.language import Language
-from pathlib import Path
 
-# Inline patterns — no external files required
-SYMPTOM_PATTERNS = [
-    {"label": "SYMPTOM", "pattern": [{"LOWER": "chest"}, {"LOWER": "pain"}]},
-    {"label": "SYMPTOM", "pattern": [{"LOWER": "chest"}, {"LOWER": "tightness"}]},
-    {"label": "SYMPTOM", "pattern": [{"LOWER": "shortness"}, {"LOWER": "of"}, {"LOWER": "breath"}]},
-    {"label": "SYMPTOM", "pattern": [{"LOWER": "dyspnea"}]},
-    {"label": "SYMPTOM", "pattern": [{"LOWER": "difficulty"}, {"LOWER": "breathing"}]},
-    {"label": "SYMPTOM", "pattern": [{"LOWER": "diaphoresis"}]},
-    {"label": "SYMPTOM", "pattern": [{"LOWER": "diaphoretic"}]},
-    {"label": "SYMPTOM", "pattern": [{"LOWER": "sweating"}]},
-    {"label": "SYMPTOM", "pattern": [{"LOWER": "palpitations"}]},
-    {"label": "SYMPTOM", "pattern": [{"LOWER": "syncope"}]},
-    {"label": "SYMPTOM", "pattern": [{"LOWER": "near"}, {"LOWER": "syncope"}]},
-    {"label": "SYMPTOM", "pattern": [{"LOWER": "loss"}, {"LOWER": "of"}, {"LOWER": "consciousness"}]},
-    {"label": "SYMPTOM", "pattern": [{"LOWER": "altered"}, {"LOWER": "consciousness"}]},
-    {"label": "SYMPTOM", "pattern": [{"LOWER": "confusion"}]},
-    {"label": "SYMPTOM", "pattern": [{"LOWER": "altered"}, {"LOWER": "mental"}, {"LOWER": "status"}]},
-    {"label": "SYMPTOM", "pattern": [{"LOWER": "fever"}]},
-    {"label": "SYMPTOM", "pattern": [{"LOWER": "febrile"}]},
-    {"label": "SYMPTOM", "pattern": [{"LOWER": "hypotension"}]},
-    {"label": "SYMPTOM", "pattern": [{"LOWER": "tachycardia"}]},
-    {"label": "SYMPTOM", "pattern": [{"LOWER": "bradycardia"}]},
-    {"label": "SYMPTOM", "pattern": [{"LOWER": "tachypnea"}]},
-    {"label": "SYMPTOM", "pattern": [{"LOWER": "nausea"}]},
-    {"label": "SYMPTOM", "pattern": [{"LOWER": "vomiting"}]},
-    {"label": "SYMPTOM", "pattern": [{"LOWER": "nausea"}, {"LOWER": "and"}, {"LOWER": "vomiting"}]},
-    {"label": "SYMPTOM", "pattern": [{"LOWER": "headache"}]},
-    {"label": "SYMPTOM", "pattern": [{"LOWER": "dizziness"}]},
-    {"label": "SYMPTOM", "pattern": [{"LOWER": "lightheadedness"}]},
-    {"label": "SYMPTOM", "pattern": [{"LOWER": "fatigue"}]},
-    {"label": "SYMPTOM", "pattern": [{"LOWER": "weakness"}]},
-    {"label": "SYMPTOM", "pattern": [{"LOWER": "leg"}, {"LOWER": "swelling"}]},
-    {"label": "SYMPTOM", "pattern": [{"LOWER": "edema"}]},
-    {"label": "SYMPTOM", "pattern": [{"LOWER": "peripheral"}, {"LOWER": "edema"}]},
-    {"label": "SYMPTOM", "pattern": [{"LOWER": "cough"}]},
-    {"label": "SYMPTOM", "pattern": [{"LOWER": "hemoptysis"}]},
-    {"label": "SYMPTOM", "pattern": [{"LOWER": "pleuritic"}, {"LOWER": "chest"}, {"LOWER": "pain"}]},
-    {"label": "SYMPTOM", "pattern": [{"LOWER": "unresponsive"}]},
-    {"label": "SYMPTOM", "pattern": [{"LOWER": "abdominal"}, {"LOWER": "pain"}]},
-    {"label": "SYMPTOM", "pattern": [{"LOWER": "back"}, {"LOWER": "pain"}]},
-    {"label": "SYMPTOM", "pattern": [{"LOWER": "jaw"}, {"LOWER": "pain"}]},
-    {"label": "SYMPTOM", "pattern": [{"LOWER": "arm"}, {"LOWER": "pain"}]},
-    {"label": "SYMPTOM", "pattern": [{"LOWER": "radiating"}, {"LOWER": "pain"}]},
-    {"label": "SYMPTOM", "pattern": [{"LOWER": "rigors"}]},
-    {"label": "SYMPTOM", "pattern": [{"LOWER": "chills"}]},
+# ── PE-only entity patterns ───────────────────────────────────────────────────
+# Two labels are used:
+#   PE_SYMPTOM     – presenting symptoms and clinical signs of PE
+#   PE_RISK_FACTOR – predisposing risk factors for PE
+#
+# Synonym handling
+#   "haemoptysis" / "hemoptysis" / "coughing up blood"  → same weight
+#   "pleuritic chest pain" / "chest pain worse on inspiration" /
+#   "chest pain worse on breathing in"                  → same weight
+
+PE_SYMPTOM_PATTERNS = [
+    # Pleuritic chest pain and synonyms (all equivalent PE features)
+    {"label": "PE_SYMPTOM", "pattern": [
+        {"LOWER": "pleuritic"}, {"LOWER": "chest"}, {"LOWER": "pain"}]},
+    {"label": "PE_SYMPTOM", "pattern": [
+        {"LOWER": "chest"}, {"LOWER": "pain"}, {"LOWER": "worse"},
+        {"LOWER": "on"}, {"LOWER": "inspiration"}]},
+    {"label": "PE_SYMPTOM", "pattern": [
+        {"LOWER": "chest"}, {"LOWER": "pain"}, {"LOWER": "worse"},
+        {"LOWER": "on"}, {"LOWER": "breathing"}, {"LOWER": "in"}]},
+    {"label": "PE_SYMPTOM", "pattern": [
+        {"LOWER": "chest"}, {"LOWER": "pain"}]},
+
+    # Shortness of breath
+    {"label": "PE_SYMPTOM", "pattern": [
+        {"LOWER": "shortness"}, {"LOWER": "of"}, {"LOWER": "breath"}]},
+
+    # Haemoptysis and synonyms (all equivalent PE features)
+    {"label": "PE_SYMPTOM", "pattern": [{"LOWER": "haemoptysis"}]},
+    {"label": "PE_SYMPTOM", "pattern": [{"LOWER": "hemoptysis"}]},
+    {"label": "PE_SYMPTOM", "pattern": [
+        {"LOWER": "coughing"}, {"LOWER": "up"}, {"LOWER": "blood"}]},
+
+    # Collapse / syncope
+    {"label": "PE_SYMPTOM", "pattern": [{"LOWER": "collapse"}]},
+    {"label": "PE_SYMPTOM", "pattern": [{"LOWER": "collapsed"}]},
+    {"label": "PE_SYMPTOM", "pattern": [{"LOWER": "faint"}]},
+    {"label": "PE_SYMPTOM", "pattern": [{"LOWER": "fainting"}]},
+    {"label": "PE_SYMPTOM", "pattern": [
+        {"LOWER": "dizzy"}, {"LOWER": "spells"}]},
+    {"label": "PE_SYMPTOM", "pattern": [{"LOWER": "dizziness"}]},
+
+    # Lower limb signs (DVT / PE leg features)
+    {"label": "PE_SYMPTOM", "pattern": [
+        {"LOWER": "calf"}, {"LOWER": "swelling"}]},
+    {"label": "PE_SYMPTOM", "pattern": [
+        {"LOWER": "leg"}, {"LOWER": "swelling"}]},
+    {"label": "PE_SYMPTOM", "pattern": [
+        {"LOWER": "calf"}, {"LOWER": "tenderness"}]},
+    {"label": "PE_SYMPTOM", "pattern": [
+        {"LOWER": "leg"}, {"LOWER": "tenderness"}]},
 ]
 
-DIAGNOSIS_PATTERNS = [
-    {"label": "DIAGNOSIS", "pattern": [{"LOWER": "myocardial"}, {"LOWER": "infarction"}]},
-    {"label": "DIAGNOSIS", "pattern": [{"LOWER": "mi"}]},
-    {"label": "DIAGNOSIS", "pattern": [{"LOWER": "stemi"}]},
-    {"label": "DIAGNOSIS", "pattern": [{"LOWER": "nstemi"}]},
-    {"label": "DIAGNOSIS", "pattern": [{"LOWER": "acs"}]},
-    {"label": "DIAGNOSIS", "pattern": [{"LOWER": "acute"}, {"LOWER": "coronary"}, {"LOWER": "syndrome"}]},
-    {"label": "DIAGNOSIS", "pattern": [{"LOWER": "sepsis"}]},
-    {"label": "DIAGNOSIS", "pattern": [{"LOWER": "septic"}, {"LOWER": "shock"}]},
-    {"label": "DIAGNOSIS", "pattern": [{"LOWER": "pneumonia"}]},
-    {"label": "DIAGNOSIS", "pattern": [{"LOWER": "pulmonary"}, {"LOWER": "embolism"}]},
-    {"label": "DIAGNOSIS", "pattern": [{"LOWER": "pe"}]},
-    {"label": "DIAGNOSIS", "pattern": [{"LOWER": "dvt"}]},
-    {"label": "DIAGNOSIS", "pattern": [{"LOWER": "deep"}, {"LOWER": "vein"}, {"LOWER": "thrombosis"}]},
-    {"label": "DIAGNOSIS", "pattern": [{"LOWER": "stroke"}]},
-    {"label": "DIAGNOSIS", "pattern": [{"LOWER": "anaphylaxis"}]},
-    {"label": "DIAGNOSIS", "pattern": [{"LOWER": "anaphylactic"}, {"LOWER": "shock"}]},
-    {"label": "DIAGNOSIS", "pattern": [{"LOWER": "cardiac"}, {"LOWER": "arrest"}]},
-    {"label": "DIAGNOSIS", "pattern": [{"LOWER": "respiratory"}, {"LOWER": "failure"}]},
-    {"label": "DIAGNOSIS", "pattern": [{"LOWER": "heart"}, {"LOWER": "failure"}]},
-    {"label": "DIAGNOSIS", "pattern": [{"LOWER": "chf"}]},
-    {"label": "DIAGNOSIS", "pattern": [{"LOWER": "copd"}]},
-    {"label": "DIAGNOSIS", "pattern": [{"LOWER": "asthma"}]},
-    {"label": "DIAGNOSIS", "pattern": [{"LOWER": "hypertension"}]},
-    {"label": "DIAGNOSIS", "pattern": [{"LOWER": "diabetes"}]},
-    {"label": "DIAGNOSIS", "pattern": [{"LOWER": "diabetic"}, {"LOWER": "ketoacidosis"}]},
-    {"label": "DIAGNOSIS", "pattern": [{"LOWER": "dka"}]},
+PE_RISK_FACTOR_PATTERNS = [
+    # Previous DVT / PE (personal history)
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "previous"}, {"LOWER": "dvt"}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "previous"}, {"LOWER": "pe"}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "previous"}, {"LOWER": "pulmonary"}, {"LOWER": "embolism"}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "previous"}, {"LOWER": "deep"}, {"LOWER": "vein"},
+        {"LOWER": "thrombosis"}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "history"}, {"LOWER": "of"}, {"LOWER": "dvt"}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "history"}, {"LOWER": "of"}, {"LOWER": "pe"}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "prior"}, {"LOWER": "dvt"}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "prior"}, {"LOWER": "pe"}]},
+
+    # Family history of DVT / PE
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "family"}, {"LOWER": "history"}, {"LOWER": "of"},
+        {"LOWER": "dvt"}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "family"}, {"LOWER": "history"}, {"LOWER": "of"},
+        {"LOWER": "pe"}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "family"}, {"LOWER": "history"}, {"LOWER": "of"},
+        {"LOWER": "pulmonary"}, {"LOWER": "embolism"}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "family"}, {"LOWER": "history"}, {"LOWER": "of"},
+        {"LOWER": "deep"}, {"LOWER": "vein"}, {"LOWER": "thrombosis"}]},
+
+    # Recent surgery / immobilisation
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "recent"}, {"LOWER": "surgery"}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "post"}, {"LOWER": "operative"}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [{"LOWER": "postoperative"}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "recent"}, {"LOWER": "immobilisation"}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "recent"}, {"LOWER": "immobilization"}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "prolonged"}, {"LOWER": "immobility"}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "bed"}, {"LOWER": "rest"}]},
+
+    # Long-haul travel (with and without hyphen)
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "recent"}, {"LOWER": "long"}, {"LOWER": "haul"},
+        {"LOWER": "travel"}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "recent"}, {"LOWER": "long"}, {"LOWER": "-"},
+        {"LOWER": "haul"}, {"LOWER": "travel"}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "long"}, {"LOWER": "haul"}, {"LOWER": "flight"}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "long"}, {"LOWER": "-"}, {"LOWER": "haul"},
+        {"LOWER": "flight"}]},
+
+    # Oral contraceptive / hormonal
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "oral"}, {"LOWER": "contraceptive"}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "oral"}, {"LOWER": "contraceptive"}, {"LOWER": "pill"}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [{"LOWER": "ocp"}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "combined"}, {"LOWER": "pill"}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "contraceptive"}, {"LOWER": "pill"}]},
+
+    # Active cancer / palliation
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "cancer"}, {"LOWER": "on"}, {"LOWER": "active"},
+        {"LOWER": "treatment"}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "active"}, {"LOWER": "cancer"}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "active"}, {"LOWER": "malignancy"}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "cancer"}, {"LOWER": "with"}, {"LOWER": "palliation"}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "palliative"}, {"LOWER": "cancer"}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "palliative"}, {"LOWER": "treatment"}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [{"LOWER": "chemotherapy"}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [{"LOWER": "radiotherapy"}]},
+
+    # IV drug use
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "iv"}, {"LOWER": "drug"}, {"LOWER": "use"}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "intravenous"}, {"LOWER": "drug"}, {"LOWER": "use"}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [{"LOWER": "ivdu"}]},
 ]
 
-SEVERITY_PATTERNS = [
-    {"label": "SEVERITY_MODIFIER", "pattern": [{"LOWER": "severe"}]},
-    {"label": "SEVERITY_MODIFIER", "pattern": [{"LOWER": "severe"}, {"LOWER": "acute"}]},
-    {"label": "SEVERITY_MODIFIER", "pattern": [{"LOWER": "moderate"}]},
-    {"label": "SEVERITY_MODIFIER", "pattern": [{"LOWER": "mild"}]},
-    {"label": "SEVERITY_MODIFIER", "pattern": [{"LOWER": "worsening"}]},
-    {"label": "SEVERITY_MODIFIER", "pattern": [{"LOWER": "progressive"}]},
-    {"label": "SEVERITY_MODIFIER", "pattern": [{"LOWER": "acute"}]},
-    {"label": "SEVERITY_MODIFIER", "pattern": [{"LOWER": "chronic"}]},
-    {"label": "SEVERITY_MODIFIER", "pattern": [{"LOWER": "sudden"}, {"LOWER": "onset"}]},
-    {"label": "SEVERITY_MODIFIER", "pattern": [{"LOWER": "sudden"}]},
-]
-
-ALL_PATTERNS = SYMPTOM_PATTERNS + DIAGNOSIS_PATTERNS + SEVERITY_PATTERNS
+ALL_PATTERNS = PE_SYMPTOM_PATTERNS + PE_RISK_FACTOR_PATTERNS
 
 
 def build_spacy_pipeline(model_name: str = "en_core_web_sm") -> Language:
     nlp = spacy.load(model_name, exclude=["ner"])
-    ruler = nlp.add_pipe("entity_ruler", before="senter" if "senter" in nlp.pipe_names else None)
+    ruler = nlp.add_pipe(
+        "entity_ruler",
+        before="senter" if "senter" in nlp.pipe_names else None,
+    )
     ruler.add_patterns(ALL_PATTERNS)
     return nlp

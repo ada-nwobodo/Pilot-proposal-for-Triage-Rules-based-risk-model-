@@ -1,5 +1,5 @@
 /* ============================================================
-   Clinical Risk Stratification — Triage NLP Engine
+   Pulmonary Embolism Risk Assessment — Triage NLP Engine
    Base styles and layout
    ============================================================ */
 
@@ -612,4 +612,170 @@ textarea {
   .btn {
     width: 100%;
   }
+}
+
+/* ============================================================
+   PE-specific additions
+   ============================================================ */
+
+/* Required inputs note above the grid */
+.inputs-required-note {
+  font-size: 0.875rem;
+  color: var(--color-text-muted);
+  margin-bottom: 1rem;
+  padding: 0.5rem 0.75rem;
+  background: #eff6ff;
+  border-left: 3px solid var(--color-primary);
+  border-radius: 4px;
+}
+
+/* "Required" badge in card header */
+.card-required {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-primary);
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 9999px;
+  padding: 0.125rem 0.5rem;
+}
+
+/* Vitals hint text */
+.vitals-note {
+  font-size: 0.8125rem;
+  color: var(--color-text-muted);
+  margin-bottom: 1rem;
+}
+
+/* "Not PE-scored" label inline with field label */
+.not-scored {
+  font-size: 0.7rem;
+  font-weight: 400;
+  color: var(--color-text-muted);
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+/* Analyse Risk button — full width, below vitals */
+.form-actions--analyse {
+  margin-top: 1.25rem;
+}
+
+.btn-analyse {
+  width: 100%;
+  justify-content: center;
+  padding: 0.75rem 1.25rem;
+  font-size: 1rem;
+}
+
+/* Result card spacing */
+.results-card {
+  margin-top: 1.5rem;
+}
+
+/* Individual result sections */
+.result-section {
+  padding: 1.25rem 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.result-section:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+/* Risk factor label chip */
+.label-chip--risk-factor {
+  background: #fff7ed;
+  color: #c2410c;
+  border: 1px solid #fed7aa;
+}
+
+/* Suggested diagnosis boxes */
+.diagnosis-box {
+  border-radius: var(--radius);
+  padding: 0.875rem 1.25rem;
+  font-size: 1rem;
+  font-weight: 600;
+  margin-top: 0.5rem;
+}
+
+.diagnosis-box--none {
+  background: var(--color-low-bg);
+  color: var(--color-low-text);
+  border: 1px solid var(--color-low-border);
+}
+
+.diagnosis-box--positive {
+  background: var(--color-high-bg);
+  color: var(--color-high-text);
+  border: 1px solid var(--color-high-border);
+}
+
+.diagnosis-box--critical {
+  background: var(--color-critical-bg);
+  color: var(--color-critical-text);
+  border: 1px solid var(--color-critical-border);
+}
+
+/* Recommended next steps list */
+.next-steps-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.next-step-item {
+  display: flex;
+  align-items: baseline;
+  gap: 0.375rem;
+  background: #f0fdf4;
+  border: 1px solid #86efac;
+  color: #166534;
+  border-radius: var(--radius);
+  padding: 0.4rem 0.875rem;
+  font-size: 0.9375rem;
+  font-weight: 500;
+}
+
+.next-step-icon {
+  font-weight: 700;
+  color: #16a34a;
+  flex-shrink: 0;
+}
+
+/* Sub-list for grouped blood tests */
+.next-steps-sublist {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  margin: 0.35rem 0 0 0.25rem;
+  padding: 0;
+}
+
+.next-step-subitem {
+  font-size: 0.9rem;
+  font-weight: 400;
+  color: #166534;
+  padding-left: 0.75rem;
+  position: relative;
+}
+
+.next-step-subitem::before {
+  content: "–";
+  position: absolute;
+  left: 0;
+  color: #16a34a;
+}
+
+/* Empty state note */
+.empty-note {
+  font-size: 0.875rem;
+  color: var(--color-text-muted);
+  margin-top: 0.5rem;
 }

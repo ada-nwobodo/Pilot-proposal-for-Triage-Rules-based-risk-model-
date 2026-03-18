@@ -3,44 +3,45 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Clinical Risk Stratification — Triage NLP Engine</title>
+  <title>Pulmonary Embolism Risk Assessment — Triage NLP Engine</title>
   <link rel="stylesheet" href="/static/style.css" />
 </head>
 <body>
 
-  <!-- Page Header -->
   <header class="page-header">
     <div>
-      <h1>Clinical Risk Stratification</h1>
-      <p class="subtitle">Triage NLP Engine &mdash; Rules-based risk assessment from free-text notes</p>
+      <h1>Pulmonary Embolism Risk Assessment</h1>
+      <p class="subtitle">PE Triage NLP Engine &mdash; Rules-based risk assessment from free-text notes</p>
     </div>
-    <span class="header-badge">Synthetic Demo</span>
+    <span class="header-badge">PE Only &bull; Synthetic Demo</span>
   </header>
 
   <main class="main-container">
 
     <form id="risk-form" novalidate>
+      <p class="inputs-required-note">
+        Both the clinical history and vital signs are required inputs for PE risk analysis.
+      </p>
+
       <div class="input-grid">
 
         <!-- Left panel: clinical note -->
         <div class="card">
           <div class="card-header">
-            <span class="card-title">Clinical Note</span>
+            <span class="card-title">Clinical History</span>
+            <span class="card-required">Required</span>
           </div>
           <div class="card-body">
-            <label for="note-text">Free-text note</label>
+            <label for="note-text">Free-text clinical note</label>
             <textarea
               id="note-text"
               name="note_text"
-              placeholder="Enter the clinical note here, e.g.: Patient presents with sudden onset severe chest pain radiating to the left arm, associated with diaphoresis and shortness of breath..."
+              placeholder="Enter the clinical note here, e.g.: Pt presents with 3 day history of pleuritic chest pain, shortness of breath and haemoptysis..."
               spellcheck="false"
               required
             ></textarea>
 
             <div class="form-actions">
-              <button type="submit" id="submit-btn" class="btn btn-primary">
-                Analyse Risk
-              </button>
               <button type="button" id="load-example-btn" class="btn btn-secondary">
                 Load Example
               </button>
@@ -51,14 +52,15 @@
           </div>
         </div>
 
-        <!-- Right panel: vital signs -->
+        <!-- Right panel: vital signs + analyse button -->
         <div class="card">
           <div class="card-header">
             <span class="card-title">Vital Signs</span>
+            <span class="card-required">Required</span>
           </div>
           <div class="card-body">
-            <p style="font-size:0.8125rem;color:var(--color-text-muted);margin-bottom:1rem;">
-              All fields optional. Leave blank if not recorded.
+            <p class="vitals-note">
+              Enter available observations. Temperature and GCS are recorded but not scored for PE risk.
             </p>
             <div class="vitals-grid">
 
@@ -98,20 +100,28 @@
               </div>
 
               <div class="form-field">
-                <label for="temperature">Temperature</label>
+                <label for="temperature">Temperature <span class="not-scored">(not PE-scored)</span></label>
                 <input type="number" id="temperature" name="temperature"
                        placeholder="37.0" min="30" max="45" step="0.1" />
                 <span class="unit">&deg;C</span>
               </div>
 
               <div class="form-field">
-                <label for="gcs">GCS</label>
+                <label for="gcs">GCS <span class="not-scored">(not PE-scored)</span></label>
                 <input type="number" id="gcs" name="gcs"
                        placeholder="15" min="3" max="15" step="1" />
                 <span class="unit">3&ndash;15</span>
               </div>
 
+            </div><!-- /vitals-grid -->
+
+            <!-- Analyse Risk button sits directly below the vitals -->
+            <div class="form-actions form-actions--analyse">
+              <button type="submit" id="submit-btn" class="btn btn-primary btn-analyse">
+                Analyse Risk
+              </button>
             </div>
+
           </div>
         </div>
 
@@ -121,60 +131,67 @@
     <!-- Error display -->
     <div id="error-box" class="error-box" role="alert"></div>
 
-    <!-- Results -->
+    <!-- ── Results ─────────────────────────────────────────────────────────── -->
     <section id="results-section" class="results-hidden">
 
-      <div class="card" style="margin-top: 0;">
+      <div class="card results-card">
         <div class="card-header">
-          <span class="card-title">Assessment Result</span>
+          <span class="card-title">PE Assessment Result</span>
           <span id="processing-time" class="perf-info" title="Server-side processing time"></span>
         </div>
         <div class="card-body">
 
-          <!-- Risk badge + scores -->
-          <div class="result-summary">
-            <div id="risk-badge" class="risk-badge">—</div>
-
-            <span class="score-pill">
-              Combined score: <strong id="combined-score">—</strong>
-            </span>
-            <span class="score-pill">
-              Entity score: <strong id="entity-score">—</strong>
-            </span>
-            <span class="score-pill">
-              Vitals points: <strong id="vitals-score">—</strong>
-            </span>
+          <!-- Section 1: PE Features Detected in History -->
+          <div class="result-section">
+            <p class="section-title">1 &mdash; PE Features Detected in History</p>
+            <table class="entity-table">
+              <thead>
+                <tr>
+                  <th>Finding</th>
+                  <th>Type</th>
+                  <th>Severity</th>
+                  <th>Scored</th>
+                </tr>
+              </thead>
+              <tbody id="entity-table-body"></tbody>
+            </table>
+            <p id="empty-entities" class="empty-note" style="display:none;">
+              No PE-specific features detected in clinical history.
+            </p>
           </div>
 
-          <!-- Override banner (hidden unless override triggered) -->
-          <div id="override-banner" class="override-banner" style="display:none;"></div>
+          <!-- Section 2: Abnormal PE-Relevant Vital Signs -->
+          <div class="result-section">
+            <p class="section-title">2 &mdash; Abnormal PE-Relevant Vital Signs</p>
+            <ul id="vitals-flags-list" class="vitals-flags-list"></ul>
+            <p id="empty-vitals" class="empty-note" style="display:none;">
+              No PE-relevant vital sign abnormalities detected.
+            </p>
+          </div>
 
-          <!-- Reasoning -->
-          <div id="reasoning-text" class="reasoning-box"></div>
+          <!-- Section 3: PE Risk Assessment -->
+          <div class="result-section">
+            <p class="section-title">3 &mdash; PE Risk Assessment</p>
+            <div class="result-summary">
+              <div id="risk-badge" class="risk-badge">—</div>
+              <span class="score-pill">
+                Combined score: <strong id="combined-score">—</strong>
+              </span>
+            </div>
+            <div id="reasoning-text" class="reasoning-box"></div>
+          </div>
 
-          <!-- Entity contributions -->
-          <p class="section-title">Entity Contributions</p>
-          <table class="entity-table">
-            <thead>
-              <tr>
-                <th>Entity</th>
-                <th>Type</th>
-                <th>Severity</th>
-                <th>Score</th>
-              </tr>
-            </thead>
-            <tbody id="entity-table-body"></tbody>
-          </table>
-          <p id="empty-entities" style="display:none;font-size:0.875rem;color:var(--color-text-muted);margin-top:0.5rem;">
-            No clinical entities detected.
-          </p>
+          <!-- Section 4: Suggested Diagnosis -->
+          <div class="result-section">
+            <p class="section-title">4 &mdash; Suggested Diagnosis</p>
+            <div id="suggested-diagnosis" class="diagnosis-box"></div>
+          </div>
 
-          <!-- Vitals flags -->
-          <p class="section-title">Vital Sign Flags</p>
-          <ul id="vitals-flags-list" class="vitals-flags-list"></ul>
-          <p id="empty-vitals" style="display:none;font-size:0.875rem;color:var(--color-text-muted);margin-top:0.5rem;">
-            No vital sign abnormalities detected or no vitals provided.
-          </p>
+          <!-- Section 5: Recommended Next Steps (shown only when PE-positive) -->
+          <div id="next-steps-section" class="result-section" style="display:none;">
+            <p class="section-title">5 &mdash; Recommended Next Steps</p>
+            <ul id="next-steps-list" class="next-steps-list"></ul>
+          </div>
 
         </div>
       </div>

@@ -1,13 +1,35 @@
+# ── Python ────────────────────────────────────────────────────────────────────
 __pycache__/
 *.pyc
 *.pyo
-.env
-.venv/
-venv/
+*.pyd
+*.egg-info/
 dist/
 build/
-*.egg-info/
+
+# ── Virtual environments ───────────────────────────────────────────────────────
+.venv/
+venv/
+env/
+
+# ── Environment / secrets ──────────────────────────────────────────────────────
+.env
+.env.local
+.env.*.local
+
+# ── Test & coverage artefacts ─────────────────────────────────────────────────
 .coverage
 htmlcov/
 .pytest_cache/
+
+# ── Logs ──────────────────────────────────────────────────────────────────────
 *.log
+
+# ── OS / editor noise ─────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# ── Local Claude Code session data ────────────────────────────────────────────
+.claude/

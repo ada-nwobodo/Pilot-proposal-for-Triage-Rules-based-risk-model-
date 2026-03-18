@@ -1,78 +1,146 @@
 from __future__ import annotations
-from clinical_nlp.phrase_matcher import AnnotatedEntity, get_severity
-from clinical_nlp.schemas.output import Severity
+from clinical_nlp.phrase_matcher import AnnotatedEntity
 
-# Clinical weights per entity text (lowercase). Defaults to 1.0.
-ENTITY_WEIGHTS: dict[str, float] = {
-    "cardiac arrest": 5.0,
-    "respiratory failure": 4.5,
-    "anaphylaxis": 4.5,
-    "anaphylactic shock": 4.5,
-    "septic shock": 4.0,
-    "sepsis": 3.5,
-    "stemi": 3.5,
-    "myocardial infarction": 3.5,
-    "mi": 3.5,
-    "acs": 3.0,
-    "acute coronary syndrome": 3.0,
-    "pulmonary embolism": 3.0,
-    "pe": 3.0,
-    "stroke": 3.0,
-    "loss of consciousness": 2.5,
-    "altered consciousness": 2.5,
-    "altered mental status": 2.5,
-    "syncope": 2.5,
-    "chest pain": 2.0,
-    "shortness of breath": 2.0,
-    "dyspnea": 2.0,
-    "difficulty breathing": 2.0,
-    "diaphoresis": 2.0,
-    "diaphoretic": 2.0,
-    "hypotension": 2.0,
-    "tachycardia": 1.5,
-    "bradycardia": 1.5,
-    "tachypnea": 1.5,
-    "fever": 1.5,
-    "febrile": 1.5,
-    "palpitations": 1.5,
-    "hemoptysis": 1.5,
-    "confusion": 2.0,
-    "unresponsive": 4.0,
-    "nausea": 0.5,
-    "vomiting": 0.5,
-    "headache": 0.5,
-    "dizziness": 0.5,
-    "fatigue": 0.3,
-    "cough": 0.5,
+# ── Synonym / canonical groups ────────────────────────────────────────────────
+# Each group contributes AT MOST 1 point to the total score, regardless of
+# how many synonymous phrases appear in the note.  Any entity text not listed
+# here maps to its own group (1 point if present and not negated).
+
+SYNONYM_GROUPS: dict[str, set[str]] = {
+    # All chest-pain variants (including pleuritic, inspiratory) = 1 feature
+    "chest_pain": {
+        "chest pain",
+        "pleuritic chest pain",
+        "chest pain worse on inspiration",
+        "chest pain worse on breathing in",
+    },
+    # Haemoptysis and synonym = 1 feature
+    "haemoptysis": {
+        "haemoptysis",
+        "hemoptysis",
+        "coughing up blood",
+    },
+    # Collapse, faint, and dizziness = 1 syncope/collapse feature
+    "syncope_collapse": {
+        "collapse",
+        "collapsed",
+        "faint",
+        "fainting",
+        "dizzy spells",
+        "dizziness",
+    },
+    # Personal history of DVT
+    "previous_dvt": {
+        "previous dvt",
+        "history of dvt",
+        "prior dvt",
+        "previous deep vein thrombosis",
+    },
+    # Personal history of PE
+    "previous_pe": {
+        "previous pe",
+        "history of pe",
+        "prior pe",
+        "previous pulmonary embolism",
+    },
+    # Family history of DVT
+    "family_hx_dvt": {
+        "family history of dvt",
+        "family history of deep vein thrombosis",
+    },
+    # Family history of PE
+    "family_hx_pe": {
+        "family history of pe",
+        "family history of pulmonary embolism",
+    },
+    # Recent surgery / postoperative
+    "surgery": {
+        "recent surgery",
+        "post operative",
+        "postoperative",
+    },
+    # Long-haul travel (with/without hyphen)
+    "long_haul_travel": {
+        "recent long haul travel",
+        "recent long - haul travel",
+        "long haul flight",
+        "long - haul flight",
+    },
+    # Immobilisation variants
+    "immobilisation": {
+        "recent immobilisation",
+        "recent immobilization",
+        "prolonged immobility",
+        "bed rest",
+    },
+    # Oral contraceptive / hormonal variants
+    "ocp": {
+        "oral contraceptive",
+        "oral contraceptive pill",
+        "ocp",
+        "combined pill",
+        "contraceptive pill",
+    },
+    # Active cancer / palliative cancer / treatment variants
+    "active_cancer": {
+        "cancer on active treatment",
+        "active cancer",
+        "active malignancy",
+        "cancer with palliation",
+        "palliative cancer",
+        "palliative treatment",
+        "chemotherapy",
+        "radiotherapy",
+    },
+    # IV drug use
+    "iv_drug_use": {
+        "iv drug use",
+        "intravenous drug use",
+        "ivdu",
+    },
 }
 
-SEVERITY_MULTIPLIERS: dict[Severity, float] = {
-    Severity.UNKNOWN: 1.0,
-    Severity.MILD: 0.75,
-    Severity.MODERATE: 1.25,
-    Severity.SEVERE: 2.0,
+# Reverse lookup: entity text (lowercase) → canonical group name
+_ENTITY_TO_GROUP: dict[str, str] = {
+    text: group
+    for group, texts in SYNONYM_GROUPS.items()
+    for text in texts
 }
 
-# Diagnosis label gets a boost
-DIAGNOSIS_BOOST = 1.2
+
+def canonical_group(entity_text: str) -> str:
+    """Return the canonical group name for an entity.
+
+    Falls back to the entity text itself so that any entity not in a
+    synonym group is its own 1-point feature.
+    """
+    return _ENTITY_TO_GROUP.get(entity_text.lower(), entity_text.lower())
 
 
-def score_entity(entity: AnnotatedEntity) -> float:
-    if entity.is_negated:
-        return 0.0
+def deduplicate_and_score(
+    entities: list[AnnotatedEntity],
+) -> list[tuple[AnnotatedEntity, int]]:
+    """Assign each entity a score of 0 or 1.
 
-    base = ENTITY_WEIGHTS.get(entity.text.lower(), 1.0)
-    severity = get_severity(entity)
-    multiplier = SEVERITY_MULTIPLIERS[severity]
+    Rules:
+      - Negated entities → 0 (not counted).
+      - First non-negated entity in a canonical group → 1 (counted).
+      - Subsequent entities whose group has already been counted → 0
+        (still returned so the UI can show them as duplicates).
+    """
+    seen_groups: set[str] = set()
+    result: list[tuple[AnnotatedEntity, int]] = []
 
-    if entity.label == "DIAGNOSIS":
-        multiplier *= DIAGNOSIS_BOOST
+    for ent in entities:
+        if ent.is_negated:
+            result.append((ent, 0))
+            continue
 
-    return round(base * multiplier, 3)
+        group = canonical_group(ent.text)
+        if group in seen_groups:
+            result.append((ent, 0))   # duplicate — visible but not scored
+        else:
+            seen_groups.add(group)
+            result.append((ent, 1))   # first occurrence — scored
 
-
-def aggregate_entity_scores(scored: list[float]) -> float:
-    """Weighted max + contribution sum strategy."""
-    if not scored:
-        return 0.0
-    return round(max(scored) * 0.6 + sum(scored) * 0.4, 3)
+    return result

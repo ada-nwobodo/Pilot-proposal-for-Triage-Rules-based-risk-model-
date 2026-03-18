@@ -1,25 +1,29 @@
 from __future__ import annotations
 import time
-from clinical_nlp.schemas.input import ClinicalInput
 from clinical_nlp.schemas.output import (
-    RiskLevel, RiskAssessment, EntityContribution, VitalsFlag, Severity
+    RiskLevel, RiskAssessment, EntityContribution, VitalsFlag, Severity,
 )
 from clinical_nlp.phrase_matcher import AnnotatedEntity, get_severity
 from clinical_nlp.vitals.scorer import VitalsScore
-from .entity_scorer import score_entity, aggregate_entity_scores, ENTITY_WEIGHTS
+from .entity_scorer import deduplicate_and_score, canonical_group
 
-# Entities that force CRITICAL regardless of score
-CRITICAL_OVERRIDE_ENTITIES = {
-    "cardiac arrest", "respiratory arrest", "respiratory failure",
-    "anaphylaxis", "anaphylactic shock", "status epilepticus",
-    "unresponsive",
-}
-
+# ── Risk thresholds (1-point-per-feature integer scale) ───────────────────────
+# Combined score = unique entity groups + unique vital flags (simple addition).
 RISK_THRESHOLDS = [
-    (RiskLevel.CRITICAL, 8.0),
-    (RiskLevel.HIGH, 5.0),
-    (RiskLevel.MEDIUM, 2.0),
-    (RiskLevel.LOW, 0.0),
+    (RiskLevel.CRITICAL, 5),
+    (RiskLevel.HIGH,     3),
+    (RiskLevel.MEDIUM,   1),
+    (RiskLevel.LOW,      0),
+]
+
+# Investigations recommended for any PE-positive result (MEDIUM / HIGH / CRITICAL)
+PE_NEXT_STEPS = [
+    "ECG",
+    "Insert wide bore cannula (pink)",
+    "FBC",
+    "U&E",
+    "Clotting",
+    "D-dimer",
 ]
 
 
@@ -27,41 +31,30 @@ def assess(
     entities: list[AnnotatedEntity],
     vitals_score: VitalsScore,
     patient_id: str | None = None,
-    entity_weight: float = 0.55,
-    vitals_weight: float = 0.45,
 ) -> RiskAssessment:
     t0 = time.perf_counter()
 
-    # Phase 1: Override rules
-    override, override_reason = _check_overrides(entities, vitals_score)
+    # Phase 1: Deduplicate entities — 1 point per unique canonical group
+    scored_entities = deduplicate_and_score(entities)
+    entity_score = sum(s for _, s in scored_entities)
 
-    # Phase 2: Numeric scoring
-    scored_entities = [(ent, score_entity(ent)) for ent in entities]
-    entity_scores = [s for _, s in scored_entities]
-    entity_score_agg = aggregate_entity_scores(entity_scores)
+    # Phase 2: Combined score = entity count + vital flag count (no weights)
+    combined_score = float(entity_score + vitals_score.total_points)
 
-    combined_score = round(
-        entity_score_agg * entity_weight + vitals_score.total_points * vitals_weight,
-        3,
-    )
+    # Phase 3: Map integer total to PE risk level
+    risk_level = _score_to_risk(combined_score)
 
-    # Phase 3: Threshold to risk level (or override)
-    if override:
-        risk_level = override
-    else:
-        risk_level = _score_to_risk(combined_score)
-
-    # Build output
+    # Phase 4: Build structured outputs
     contributions = _build_contributions(scored_entities)
     vitals_flags = [
         VitalsFlag(field=f, value=v, points=p, reason=r)
         for f, v, p, r in vitals_score.flagged_fields
     ]
 
-    reasoning = _build_reasoning(
-        risk_level, combined_score, contributions, vitals_flags,
-        override_triggered=bool(override_reason), override_reason=override_reason,
-    )
+    suggested_diagnosis = _suggested_diagnosis(risk_level)
+    next_steps = PE_NEXT_STEPS if risk_level != RiskLevel.LOW else []
+
+    reasoning = _build_reasoning(risk_level, contributions, vitals_flags)
 
     elapsed_ms = round((time.perf_counter() - t0) * 1000, 2)
 
@@ -69,42 +62,17 @@ def assess(
         patient_id=patient_id,
         risk_level=risk_level,
         combined_score=combined_score,
-        entity_score=entity_score_agg,
+        entity_score=float(entity_score),
         vitals_score=vitals_score.total_points,
         entity_contributions=contributions,
         vitals_flags=vitals_flags,
-        override_triggered=bool(override_reason),
-        override_reason=override_reason,
+        override_triggered=False,
+        override_reason=None,
         reasoning_text=reasoning,
+        suggested_diagnosis=suggested_diagnosis,
+        next_steps=next_steps,
         processing_time_ms=elapsed_ms,
     )
-
-
-def _check_overrides(
-    entities: list[AnnotatedEntity],
-    vitals: VitalsScore,
-) -> tuple[RiskLevel | None, str | None]:
-    # CRITICAL entity override
-    for ent in entities:
-        if not ent.is_negated and ent.text.lower() in CRITICAL_OVERRIDE_ENTITIES:
-            return RiskLevel.CRITICAL, f"Critical entity detected: '{ent.text}'"
-
-    # CRITICAL vitals override
-    for field_name, value, points, reason in vitals.flagged_fields:
-        if field_name == "spo2" and value < 85:
-            return RiskLevel.CRITICAL, f"SpO2 critically low: {value}%"
-        if field_name == "gcs" and value < 9:
-            return RiskLevel.CRITICAL, f"GCS critically low: {value}"
-
-    # HIGH vitals override
-    severe_entity_count = sum(
-        1 for ent in entities
-        if not ent.is_negated and get_severity(ent) == Severity.SEVERE
-    )
-    if severe_entity_count >= 3:
-        return RiskLevel.HIGH, f"{severe_entity_count} severe-severity entities present"
-
-    return None, None
 
 
 def _score_to_risk(score: float) -> RiskLevel:
@@ -114,8 +82,16 @@ def _score_to_risk(score: float) -> RiskLevel:
     return RiskLevel.LOW
 
 
+def _suggested_diagnosis(risk_level: RiskLevel) -> str | None:
+    if risk_level == RiskLevel.LOW:
+        return None
+    if risk_level == RiskLevel.CRITICAL:
+        return "Possible Pulmonary Embolism — haemodynamically compromised"
+    return "Possible Pulmonary Embolism"
+
+
 def _build_contributions(
-    scored: list[tuple[AnnotatedEntity, float]]
+    scored: list[tuple[AnnotatedEntity, int]],
 ) -> list[EntityContribution]:
     return [
         EntityContribution(
@@ -123,8 +99,8 @@ def _build_contributions(
             label=ent.label,
             is_negated=ent.is_negated,
             severity=get_severity(ent),
-            weight=ENTITY_WEIGHTS.get(ent.text.lower(), 1.0),
-            score_contribution=score,
+            weight=1.0,                     # uniform — all features equal
+            score_contribution=float(score),
         )
         for ent, score in scored
     ]
@@ -132,34 +108,65 @@ def _build_contributions(
 
 def _build_reasoning(
     risk_level: RiskLevel,
-    combined_score: float,
     contributions: list[EntityContribution],
     vitals_flags: list[VitalsFlag],
-    override_triggered: bool,
-    override_reason: str | None,
 ) -> str:
-    active = [c for c in contributions if not c.is_negated]
-    negated = [c for c in contributions if c.is_negated]
+    # Scored (counted) vs negated vs visible-but-duplicate
+    counted  = [c for c in contributions if c.score_contribution == 1.0]
+    negated  = [c for c in contributions if c.is_negated]
+    # (duplicates have score_contribution==0 and is_negated==False — shown but not counted)
 
-    parts = [f"Risk assessed as {risk_level.value} (combined score: {combined_score:.2f})."]
+    if risk_level == RiskLevel.LOW:
+        parts = ["Not suggestive of PE."]
+        if not counted:
+            parts.append(
+                "No PE-specific features were detected in the clinical history."
+            )
+        if negated:
+            neg_summary = ", ".join(c.text for c in negated[:3])
+            parts.append(
+                f"The following features were explicitly negated and not counted:"
+                f" {neg_summary}."
+            )
+        if not vitals_flags:
+            parts.append("Vital signs show no PE-relevant abnormalities.")
+        return " ".join(parts)
 
-    if override_triggered:
-        parts.append(f"Override rule triggered: {override_reason}.")
+    # MEDIUM / HIGH / CRITICAL
+    if risk_level == RiskLevel.CRITICAL:
+        parts = [
+            "This presentation is very concerning for Pulmonary Embolism"
+            " with possible haemodynamic compromise."
+        ]
+    elif risk_level == RiskLevel.HIGH:
+        parts = ["This presentation is concerning for possible Pulmonary Embolism."]
+    else:
+        parts = [
+            "This presentation has features that may be consistent with"
+            " Pulmonary Embolism."
+        ]
 
-    if active:
-        entity_summary = ", ".join(
-            f"{c.text} [{c.severity.value}]" for c in active[:5]
-        )
-        parts.append(f"Active entities: {entity_summary}.")
+    pe_symptoms     = [c for c in counted if c.label == "PE_SYMPTOM"]
+    pe_risk_factors = [c for c in counted if c.label == "PE_RISK_FACTOR"]
+
+    if pe_symptoms:
+        sym_summary = ", ".join(c.text for c in pe_symptoms[:6])
+        parts.append(f"PE-relevant symptoms/signs: {sym_summary}.")
+
+    if pe_risk_factors:
+        rf_summary = ", ".join(c.text for c in pe_risk_factors[:5])
+        parts.append(f"PE risk factors identified: {rf_summary}.")
 
     if negated:
         neg_summary = ", ".join(c.text for c in negated[:3])
-        parts.append(f"Negated (not counted): {neg_summary}.")
+        parts.append(
+            f"The following were explicitly negated (not counted): {neg_summary}."
+        )
 
     if vitals_flags:
-        vitals_summary = ", ".join(f.reason for f in vitals_flags[:4])
-        parts.append(f"Vital sign flags: {vitals_summary}.")
+        vitals_summary = "; ".join(f.reason for f in vitals_flags)
+        parts.append(f"PE-relevant vital sign abnormalities: {vitals_summary}.")
     else:
-        parts.append("Vital signs within normal limits or not provided.")
+        parts.append("No PE-relevant vital sign abnormalities detected.")
 
     return " ".join(parts)

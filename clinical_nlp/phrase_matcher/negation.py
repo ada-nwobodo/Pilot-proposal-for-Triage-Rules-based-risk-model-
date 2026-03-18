@@ -48,7 +48,7 @@ def detect_negation(doc: Doc, pre_window: int = 5, post_window: int = 3) -> list
     entities: list[AnnotatedEntity] = []
 
     for ent in doc.ents:
-        if ent.label_ not in ("SYMPTOM", "DIAGNOSIS"):
+        if ent.label_ not in ("PE_SYMPTOM", "PE_RISK_FACTOR"):
             continue
 
         ae = AnnotatedEntity(

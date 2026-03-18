@@ -45,4 +45,6 @@ class RiskAssessment(BaseModel):
     override_triggered: bool = False
     override_reason: Optional[str] = None
     reasoning_text: str
+    suggested_diagnosis: Optional[str] = None
+    next_steps: list[str] = []
     processing_time_ms: float = 0.0

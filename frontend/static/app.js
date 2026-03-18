@@ -1,56 +1,56 @@
 /* ============================================================
-   Clinical Risk Stratification — Triage NLP Engine
+   Pulmonary Embolism Risk Assessment — Triage NLP Engine
    Frontend application — vanilla JS, no dependencies
    ============================================================ */
 
 'use strict';
 
-// ---- DOM references --------------------------------------------------------
+// ── DOM references ────────────────────────────────────────────────────────────
 
-const form            = document.getElementById('risk-form');
-const noteTextarea    = document.getElementById('note-text');
-const submitBtn       = document.getElementById('submit-btn');
-const loadExampleBtn  = document.getElementById('load-example-btn');
-const clearBtn        = document.getElementById('clear-btn');
-const resultsSection  = document.getElementById('results-section');
-const errorBox        = document.getElementById('error-box');
+const form           = document.getElementById('risk-form');
+const noteTextarea   = document.getElementById('note-text');
+const submitBtn      = document.getElementById('submit-btn');
+const loadExampleBtn = document.getElementById('load-example-btn');
+const clearBtn       = document.getElementById('clear-btn');
+const resultsSection = document.getElementById('results-section');
+const errorBox       = document.getElementById('error-box');
 
 // Result display elements
-const riskBadgeEl       = document.getElementById('risk-badge');
-const combinedScoreEl   = document.getElementById('combined-score');
-const entityScoreEl     = document.getElementById('entity-score');
-const vitalsScoreEl     = document.getElementById('vitals-score');
-const processingTimeEl  = document.getElementById('processing-time');
-const reasoningTextEl   = document.getElementById('reasoning-text');
-const overrideBannerEl  = document.getElementById('override-banner');
-const entityTableBody   = document.getElementById('entity-table-body');
-const vitalsListEl      = document.getElementById('vitals-flags-list');
-const emptyEntitiesEl   = document.getElementById('empty-entities');
-const emptyVitalsEl     = document.getElementById('empty-vitals');
+const riskBadgeEl         = document.getElementById('risk-badge');
+const combinedScoreEl     = document.getElementById('combined-score');
+const processingTimeEl    = document.getElementById('processing-time');
+const reasoningTextEl     = document.getElementById('reasoning-text');
+const entityTableBody     = document.getElementById('entity-table-body');
+const vitalsListEl        = document.getElementById('vitals-flags-list');
+const emptyEntitiesEl     = document.getElementById('empty-entities');
+const emptyVitalsEl       = document.getElementById('empty-vitals');
+const suggestedDiagnosisEl = document.getElementById('suggested-diagnosis');
+const nextStepsSection    = document.getElementById('next-steps-section');
+const nextStepsList       = document.getElementById('next-steps-list');
 
 // Vital sign input elements
 const vitalInputIds = [
   'heart-rate', 'systolic-bp', 'diastolic-bp',
-  'respiratory-rate', 'spo2', 'temperature', 'gcs'
+  'respiratory-rate', 'spo2', 'temperature', 'gcs',
 ];
 
 // Map from HTML ID to schema field name
 const VITAL_FIELD_MAP = {
-  'heart-rate':        'heart_rate',
-  'systolic-bp':       'systolic_bp',
-  'diastolic-bp':      'diastolic_bp',
-  'respiratory-rate':  'respiratory_rate',
-  'spo2':              'spo2',
-  'temperature':       'temperature',
-  'gcs':               'gcs',
+  'heart-rate':       'heart_rate',
+  'systolic-bp':      'systolic_bp',
+  'diastolic-bp':     'diastolic_bp',
+  'respiratory-rate': 'respiratory_rate',
+  'spo2':             'spo2',
+  'temperature':      'temperature',
+  'gcs':              'gcs',
 };
 
-// ---- State -----------------------------------------------------------------
+// ── State ─────────────────────────────────────────────────────────────────────
 
-let exampleIndex = 0;
-let cachedExamples = null;
+let exampleIndex    = 0;
+let cachedExamples  = null;
 
-// ---- Helpers ---------------------------------------------------------------
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function setLoading(loading) {
   if (loading) {
@@ -96,7 +96,7 @@ function buildPayload() {
   };
 }
 
-// ---- Risk badge ------------------------------------------------------------
+// ── Risk badge ────────────────────────────────────────────────────────────────
 
 const RISK_BADGE_CLASS = {
   LOW:      'risk-badge--low',
@@ -105,40 +105,41 @@ const RISK_BADGE_CLASS = {
   CRITICAL: 'risk-badge--critical',
 };
 
-const RISK_ICONS = {
-  LOW:      '&#10003;',
-  MEDIUM:   '&#9888;',
-  HIGH:     '&#9888;&#9888;',
-  CRITICAL: '&#9888;&#9888;&#9888;',
+const RISK_LABEL = {
+  LOW:      'Low PE Risk',
+  MEDIUM:   'Medium PE Risk',
+  HIGH:     'High PE Risk',
+  CRITICAL: 'Critical PE Risk',
 };
 
 function renderRiskBadge(riskLevel) {
   riskBadgeEl.className = `risk-badge ${RISK_BADGE_CLASS[riskLevel] || ''}`;
-  riskBadgeEl.innerHTML = `<span>${RISK_ICONS[riskLevel] || ''}</span> ${riskLevel}`;
+  riskBadgeEl.textContent = RISK_LABEL[riskLevel] || riskLevel;
 }
 
-// ---- Entity contributions table --------------------------------------------
+// ── Section 1: Entity contributions table ────────────────────────────────────
 
 function severityClass(severity) {
   return `severity-${severity.toLowerCase()}`;
 }
 
 function labelChipHtml(label) {
-  const cls = label === 'DIAGNOSIS' ? 'label-chip--diagnosis' : 'label-chip--symptom';
-  return `<span class="label-chip ${cls}">${label}</span>`;
+  if (label === 'PE_RISK_FACTOR') {
+    return '<span class="label-chip label-chip--risk-factor">Risk Factor</span>';
+  }
+  return '<span class="label-chip label-chip--symptom">PE Symptom</span>';
 }
 
 function renderEntityContributions(contributions) {
   entityTableBody.innerHTML = '';
 
-  const nonZeroContribs = contributions.filter(c => !c.is_negated || c.is_negated);
-  if (nonZeroContribs.length === 0) {
+  if (contributions.length === 0) {
     emptyEntitiesEl.style.display = 'block';
     return;
   }
   emptyEntitiesEl.style.display = 'none';
 
-  // Sort: active first, then by score descending
+  // Active first, then negated; within each group sort by score descending
   const sorted = [...contributions].sort((a, b) => {
     if (a.is_negated !== b.is_negated) return a.is_negated ? 1 : -1;
     return b.score_contribution - a.score_contribution;
@@ -146,43 +147,43 @@ function renderEntityContributions(contributions) {
 
   for (const contrib of sorted) {
     const tr = document.createElement('tr');
-    if (contrib.is_negated) {
-      tr.classList.add('entity-negated');
-    }
+    if (contrib.is_negated) tr.classList.add('entity-negated');
 
-    const scoreDisplay = contrib.is_negated ? '—' : contrib.score_contribution.toFixed(3);
-    const severityCls  = contrib.is_negated ? '' : severityClass(contrib.severity);
+    const scoreDisplay = contrib.is_negated
+      ? '<em>negated</em>'
+      : contrib.score_contribution === 0
+        ? '<em>duplicate</em>'
+        : '+1';
+    const sevCls = contrib.is_negated ? '' : severityClass(contrib.severity);
 
     tr.innerHTML = `
-      <td class="${severityCls}" style="font-weight:500">${escapeHtml(contrib.text)}</td>
+      <td class="${sevCls}" style="font-weight:500">${escapeHtml(contrib.text)}</td>
       <td>${labelChipHtml(contrib.label)}</td>
-      <td class="${severityCls}">${contrib.severity}</td>
-      <td>${contrib.is_negated ? '<em>negated</em>' : scoreDisplay}</td>
+      <td class="${sevCls}">${contrib.severity}</td>
+      <td>${scoreDisplay}</td>
     `;
     entityTableBody.appendChild(tr);
   }
 }
 
-// ---- Vitals flags ----------------------------------------------------------
+// ── Section 2: Vitals flags ───────────────────────────────────────────────────
 
 const VITAL_DISPLAY_NAMES = {
-  heart_rate:        'Heart Rate',
-  systolic_bp:       'Systolic BP',
-  diastolic_bp:      'Diastolic BP',
-  respiratory_rate:  'Resp. Rate',
-  spo2:              'SpO2',
-  temperature:       'Temperature',
-  gcs:               'GCS',
+  heart_rate:       'Heart Rate',
+  systolic_bp:      'Systolic BP',
+  diastolic_bp:     'Diastolic BP',
+  respiratory_rate: 'Resp. Rate',
+  spo2:             'SpO2',
+  bp:               'Blood Pressure',
 };
 
 const VITAL_UNITS = {
-  heart_rate:        'bpm',
-  systolic_bp:       'mmHg',
-  diastolic_bp:      'mmHg',
-  respiratory_rate:  '/min',
-  spo2:              '%',
-  temperature:       '°C',
-  gcs:               '',
+  heart_rate:       'bpm',
+  systolic_bp:      'mmHg',
+  diastolic_bp:     'mmHg',
+  respiratory_rate: '/min',
+  spo2:             '%',
+  bp:               '',   // full info already in reason string
 };
 
 function renderVitalsFlags(flags) {
@@ -198,45 +199,104 @@ function renderVitalsFlags(flags) {
     const li = document.createElement('li');
     li.className = 'vitals-flag-item';
     const displayName = VITAL_DISPLAY_NAMES[flag.field] || flag.field;
-    const unit = VITAL_UNITS[flag.field] || '';
-    const ptsCls = flag.points >= 3 ? 'flag-points flag-points--3' : 'flag-points';
+    const unit = VITAL_UNITS[flag.field] !== undefined ? VITAL_UNITS[flag.field] : '';
+    // For combined BP flag, suppress raw value (reason string has full context)
+    const valueStr = flag.field === 'bp' ? '' : `${flag.value}${unit}`;
 
     li.innerHTML = `
       <span class="flag-field">${escapeHtml(displayName)}</span>
-      <span class="flag-value">${flag.value}${unit}</span>
+      ${valueStr ? `<span class="flag-value">${valueStr}</span>` : ''}
       <span class="flag-reason">${escapeHtml(flag.reason)}</span>
-      <span class="${ptsCls}">+${flag.points} pts</span>
+      <span class="flag-points">+${flag.points} pts</span>
     `;
     vitalsListEl.appendChild(li);
   }
 }
 
-// ---- Main result renderer --------------------------------------------------
+// ── Section 4: Suggested diagnosis ───────────────────────────────────────────
+
+function renderSuggestedDiagnosis(diagnosis, riskLevel) {
+  if (!diagnosis) {
+    suggestedDiagnosisEl.className = 'diagnosis-box diagnosis-box--none';
+    suggestedDiagnosisEl.textContent = 'Not suggestive of PE.';
+    return;
+  }
+  const cls = riskLevel === 'CRITICAL'
+    ? 'diagnosis-box diagnosis-box--critical'
+    : 'diagnosis-box diagnosis-box--positive';
+  suggestedDiagnosisEl.className = cls;
+  suggestedDiagnosisEl.textContent = diagnosis;
+}
+
+// ── Section 5: Recommended next steps ────────────────────────────────────────
+
+// Blood-test items are grouped visually under a "Blood tests:" parent entry.
+const BLOOD_TESTS = new Set(['FBC', 'U&E', 'Clotting', 'D-dimer']);
+
+function renderNextSteps(steps) {
+  nextStepsList.innerHTML = '';
+  if (!steps || steps.length === 0) {
+    nextStepsSection.style.display = 'none';
+    return;
+  }
+  nextStepsSection.style.display = '';
+
+  const topLevel  = steps.filter(s => !BLOOD_TESTS.has(s));
+  const bloodTests = steps.filter(s => BLOOD_TESTS.has(s));
+
+  for (const step of topLevel) {
+    const li = document.createElement('li');
+    li.className = 'next-step-item';
+    li.innerHTML = `<span class="next-step-icon">&#10003;</span> ${escapeHtml(step)}`;
+    nextStepsList.appendChild(li);
+  }
+
+  if (bloodTests.length > 0) {
+    const li = document.createElement('li');
+    li.className = 'next-step-item';
+    // Build the label node first, then append a sub-list beneath it
+    const label = document.createElement('span');
+    label.innerHTML = `<span class="next-step-icon">&#10003;</span> Blood tests:`;
+    li.appendChild(label);
+
+    const subUl = document.createElement('ul');
+    subUl.className = 'next-steps-sublist';
+    for (const test of bloodTests) {
+      const subLi = document.createElement('li');
+      subLi.className = 'next-step-subitem';
+      subLi.textContent = test;
+      subUl.appendChild(subLi);
+    }
+    li.appendChild(subUl);
+    nextStepsList.appendChild(li);
+  }
+}
+
+// ── Main result renderer ──────────────────────────────────────────────────────
 
 function renderResult(data) {
   resultsSection.classList.remove('results-hidden');
 
-  renderRiskBadge(data.risk_level);
+  // Section 1
+  renderEntityContributions(data.entity_contributions || []);
 
-  combinedScoreEl.textContent  = data.combined_score.toFixed(3);
-  entityScoreEl.textContent    = data.entity_score.toFixed(3);
-  vitalsScoreEl.textContent    = data.vitals_score;
+  // Section 2
+  renderVitalsFlags(data.vitals_flags || []);
+
+  // Section 3
+  renderRiskBadge(data.risk_level);
+  combinedScoreEl.textContent = data.combined_score.toFixed(0);
+  reasoningTextEl.textContent = data.reasoning_text;
   processingTimeEl.textContent = `${data.processing_time_ms.toFixed(1)} ms`;
 
-  reasoningTextEl.textContent = data.reasoning_text;
+  // Section 4
+  renderSuggestedDiagnosis(data.suggested_diagnosis || null, data.risk_level);
 
-  if (data.override_triggered && data.override_reason) {
-    overrideBannerEl.style.display = 'flex';
-    overrideBannerEl.innerHTML = `&#9888; Override rule triggered: <strong>${escapeHtml(data.override_reason)}</strong>`;
-  } else {
-    overrideBannerEl.style.display = 'none';
-  }
-
-  renderEntityContributions(data.entity_contributions || []);
-  renderVitalsFlags(data.vitals_flags || []);
+  // Section 5
+  renderNextSteps(data.next_steps || []);
 }
 
-// ---- Escape HTML utility ---------------------------------------------------
+// ── Escape HTML utility ───────────────────────────────────────────────────────
 
 function escapeHtml(str) {
   if (!str) return '';
@@ -247,12 +307,11 @@ function escapeHtml(str) {
     .replace(/"/g, '&quot;');
 }
 
-// ---- Populate form from a ClinicalInput object ----------------------------
+// ── Populate form from a ClinicalInput object ─────────────────────────────────
 
 function populateForm(caseObj) {
   noteTextarea.value = caseObj.note_text || '';
 
-  // Clear all vitals first
   for (const htmlId of vitalInputIds) {
     const el = document.getElementById(htmlId);
     if (el) el.value = '';
@@ -268,7 +327,6 @@ function populateForm(caseObj) {
     }
   }
 
-  // Show case label hint if available
   if (caseObj.case_label) {
     noteTextarea.setAttribute('data-case-label', caseObj.case_label);
     noteTextarea.title = `Ground-truth label: ${caseObj.case_label}`;
@@ -278,7 +336,7 @@ function populateForm(caseObj) {
   }
 }
 
-// ---- Event: form submit ----------------------------------------------------
+// ── Event: form submit ────────────────────────────────────────────────────────
 
 form.addEventListener('submit', async (e) => {
   e.preventDefault();
@@ -311,6 +369,7 @@ form.addEventListener('submit', async (e) => {
 
     const data = await response.json();
     renderResult(data);
+    resultsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
   } catch (err) {
     showError(`Request failed: ${err.message}`);
   } finally {
@@ -318,7 +377,7 @@ form.addEventListener('submit', async (e) => {
   }
 });
 
-// ---- Event: load example ---------------------------------------------------
+// ── Event: load example ───────────────────────────────────────────────────────
 
 loadExampleBtn.addEventListener('click', async () => {
   loadExampleBtn.disabled = true;
@@ -341,8 +400,6 @@ loadExampleBtn.addEventListener('click', async () => {
 
     populateForm(caseObj);
     clearError();
-
-    // Reset results
     resultsSection.classList.add('results-hidden');
   } catch (err) {
     showError(`Could not load examples: ${err.message}`);
@@ -352,7 +409,7 @@ loadExampleBtn.addEventListener('click', async () => {
   }
 });
 
-// ---- Event: clear ----------------------------------------------------------
+// ── Event: clear ──────────────────────────────────────────────────────────────
 
 clearBtn.addEventListener('click', () => {
   noteTextarea.value = '';
@@ -364,6 +421,6 @@ clearBtn.addEventListener('click', () => {
   clearError();
   noteTextarea.removeAttribute('data-case-label');
   noteTextarea.title = '';
-  exampleIndex = 0;
+  exampleIndex   = 0;
   cachedExamples = null;
 });
