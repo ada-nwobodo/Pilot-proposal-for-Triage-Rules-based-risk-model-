@@ -5,6 +5,24 @@
 
 'use strict';
 
+// ── Runtime config ─────────────────────────────────────────────────────────────
+// API_BASE is empty for same-origin deployments (FastAPI serves the frontend).
+// For split deployments (frontend on Vercel, backend on Render/Railway),
+// the /config endpoint provides the correct base URL at runtime.
+let API_BASE = '';
+let _supabaseConfig = { supabase_url: '', supabase_anon_key: '' };
+
+async function loadRuntimeConfig() {
+  try {
+    const resp = await fetch(`${API_BASE}/config`);
+    if (resp.ok) {
+      _supabaseConfig = await resp.json();
+    }
+  } catch (_) {
+    // Non-fatal: Supabase features will be unavailable but the NLP tool works.
+  }
+}
+
 // ── DOM references ────────────────────────────────────────────────────────────
 
 const form           = document.getElementById('risk-form');
@@ -28,6 +46,17 @@ const suggestedDiagnosisEl = document.getElementById('suggested-diagnosis');
 const nextStepsSection    = document.getElementById('next-steps-section');
 const nextStepsList       = document.getElementById('next-steps-list');
 
+// Section 6: Clinical Decision
+const decisionSection     = document.getElementById('decision-section');
+const btnAccept           = document.getElementById('btn-accept');
+const btnReject           = document.getElementById('btn-reject');
+const decisionReasonWrap  = document.getElementById('decision-reason-wrap');
+const decisionReasonLabel = document.getElementById('decision-reason-label');
+const decisionReasonInput = document.getElementById('decision-reason');
+const decisionError       = document.getElementById('decision-error');
+const btnSaveDecision     = document.getElementById('btn-save-decision');
+const decisionSavedMsg    = document.getElementById('decision-saved-msg');
+
 // Vital sign input elements
 const vitalInputIds = [
   'heart-rate', 'systolic-bp', 'diastolic-bp',
@@ -47,8 +76,11 @@ const VITAL_FIELD_MAP = {
 
 // ── State ─────────────────────────────────────────────────────────────────────
 
-let exampleIndex    = 0;
-let cachedExamples  = null;
+let exampleIndex      = 0;
+let cachedExamples    = null;
+let _lastResult       = null;   // most recent /assess API response
+let _lastNoteText     = null;   // clinical note text used for the last analysis
+let _pendingDecision  = null;   // { decision, decision_reason } — ready for Supabase
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -277,6 +309,15 @@ function renderNextSteps(steps) {
 function renderResult(data) {
   resultsSection.classList.remove('results-hidden');
 
+  // Store result and note text for Clinical Decision capture
+  _lastResult   = data;
+  _lastNoteText = noteTextarea.value.trim();
+
+  // Reset decision section for fresh analysis
+  resetDecision();
+  btnSaveDecision.disabled = false;
+  btnSaveDecision.textContent = 'Save Decision';
+
   // Section 1
   renderEntityContributions(data.entity_contributions || []);
 
@@ -336,6 +377,128 @@ function populateForm(caseObj) {
   }
 }
 
+// ── Section 6: Clinical Decision ──────────────────────────────────────────────
+
+const DECISION_PLACEHOLDERS = {
+  accept: 'Enter reason for accepting…',
+  reject: 'Enter reason for rejecting…',
+};
+
+function setDecisionError(msg) {
+  if (msg) {
+    decisionError.textContent = msg;
+    decisionError.style.display = 'block';
+  } else {
+    decisionError.textContent = '';
+    decisionError.style.display = 'none';
+  }
+}
+
+function getActiveDecision() {
+  if (btnAccept.classList.contains('btn-decision--active')) return 'accept';
+  if (btnReject.classList.contains('btn-decision--active')) return 'reject';
+  return null;
+}
+
+function selectDecision(decision) {
+  // Toggle buttons — only one active at a time
+  btnAccept.classList.toggle('btn-decision--active', decision === 'accept');
+  btnReject.classList.toggle('btn-decision--active', decision === 'reject');
+
+  // Show reason input with correct placeholder
+  decisionReasonInput.value = '';
+  decisionReasonInput.placeholder = DECISION_PLACEHOLDERS[decision];
+  decisionReasonLabel.textContent =
+    decision === 'accept' ? 'Reason for accepting' : 'Reason for rejecting';
+  decisionReasonWrap.style.display = 'block';
+
+  // Clear any previous error or saved message
+  setDecisionError(null);
+  decisionSavedMsg.style.display = 'none';
+  _pendingDecision = null;
+}
+
+function resetDecision() {
+  btnAccept.classList.remove('btn-decision--active');
+  btnReject.classList.remove('btn-decision--active');
+  decisionReasonInput.value = '';
+  decisionReasonWrap.style.display = 'none';
+  setDecisionError(null);
+  decisionSavedMsg.style.display = 'none';
+  _pendingDecision = null;
+}
+
+btnAccept.addEventListener('click', () => selectDecision('accept'));
+btnReject.addEventListener('click', () => selectDecision('reject'));
+
+btnSaveDecision.addEventListener('click', async () => {
+  setDecisionError(null);
+  decisionSavedMsg.style.display = 'none';
+
+  // ── Validate ──────────────────────────────────────────────────────────────
+  const decision = getActiveDecision();
+  if (!decision) {
+    setDecisionError('Please select Accept or Reject before saving.');
+    return;
+  }
+
+  const reason = decisionReasonInput.value.trim();
+  if (!reason) {
+    setDecisionError('Please enter a reason before saving.');
+    decisionReasonInput.focus();
+    return;
+  }
+
+  // ── Build payload ─────────────────────────────────────────────────────────
+  // detected_features: text of scored (non-negated, non-duplicate) entities
+  const detectedFeatures = (_lastResult.entity_contributions || [])
+    .filter(c => !c.is_negated && c.score_contribution > 0)
+    .map(c => c.text);
+
+  // abnormal_vitals: human-readable reason strings from flagged vitals
+  const abnormalVitals = (_lastResult.vitals_flags || []).map(f => f.reason);
+
+  const payload = {
+    clinical_note:       _lastNoteText || '',
+    detected_features:   detectedFeatures,
+    abnormal_vitals:     abnormalVitals,
+    score:               _lastResult.combined_score,
+    risk_level:          _lastResult.risk_level,
+    suggested_diagnosis: _lastResult.suggested_diagnosis || null,
+    next_steps:          _lastResult.next_steps || [],
+    decision,
+    decision_reason:     reason,
+  };
+
+  // ── Submit ────────────────────────────────────────────────────────────────
+  btnSaveDecision.disabled = true;
+  btnSaveDecision.textContent = 'Saving…';
+
+  try {
+    const response = await fetch(`${API_BASE}/decisions`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      const errData = await response.json().catch(() => ({}));
+      const detail  = errData.detail || `HTTP ${response.status}`;
+      throw new Error(detail);
+    }
+
+    // Success
+    _pendingDecision = payload;
+    decisionSavedMsg.style.display = 'block';
+    btnSaveDecision.textContent = 'Saved';
+
+  } catch (err) {
+    setDecisionError(`Save failed: ${err.message}`);
+    btnSaveDecision.disabled = false;
+    btnSaveDecision.textContent = 'Save Decision';
+  }
+});
+
 // ── Event: form submit ────────────────────────────────────────────────────────
 
 form.addEventListener('submit', async (e) => {
@@ -353,7 +516,7 @@ form.addEventListener('submit', async (e) => {
   setLoading(true);
 
   try {
-    const response = await fetch('/assess', {
+    const response = await fetch(`${API_BASE}/assess`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
@@ -385,7 +548,7 @@ loadExampleBtn.addEventListener('click', async () => {
 
   try {
     if (!cachedExamples) {
-      const resp = await fetch('/examples');
+      const resp = await fetch(`${API_BASE}/examples`);
       if (!resp.ok) throw new Error(`Failed to fetch examples (${resp.status})`);
       cachedExamples = await resp.json();
     }
@@ -409,6 +572,13 @@ loadExampleBtn.addEventListener('click', async () => {
   }
 });
 
+// ── Initialise ────────────────────────────────────────────────────────────────
+// Fetch runtime config (Supabase public keys, API base URL) before first use.
+
+document.addEventListener('DOMContentLoaded', () => {
+  loadRuntimeConfig();
+});
+
 // ── Event: clear ──────────────────────────────────────────────────────────────
 
 clearBtn.addEventListener('click', () => {
@@ -423,4 +593,9 @@ clearBtn.addEventListener('click', () => {
   noteTextarea.title = '';
   exampleIndex   = 0;
   cachedExamples = null;
+  _lastResult    = null;
+  _lastNoteText  = null;
+  resetDecision();
+  btnSaveDecision.disabled = false;
+  btnSaveDecision.textContent = 'Save Decision';
 });

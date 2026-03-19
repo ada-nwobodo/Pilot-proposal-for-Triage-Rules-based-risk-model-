@@ -1,0 +1,31 @@
+# Python
+.venv/
+venv/
+env/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+
+# Secrets — never ship .env into a Docker image
+.env
+.env.local
+.env.*.local
+
+# Test and coverage artefacts
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Local tooling
+.claude/
+.git/
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Logs
+*.log

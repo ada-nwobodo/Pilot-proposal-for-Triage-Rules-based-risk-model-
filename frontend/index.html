@@ -193,6 +193,47 @@
             <ul id="next-steps-list" class="next-steps-list"></ul>
           </div>
 
+          <!-- Section 6: Clinical Decision -->
+          <div id="decision-section" class="result-section decision-section">
+            <p class="section-title">6 &mdash; Clinical Decision</p>
+            <p class="decision-instructions">
+              Review the assessment above and record your clinical decision.
+            </p>
+
+            <div class="decision-toggle-group" role="group" aria-label="Clinical decision">
+              <button type="button" id="btn-accept" class="btn btn-decision" data-decision="accept">
+                Accept recommendation
+              </button>
+              <button type="button" id="btn-reject" class="btn btn-decision" data-decision="reject">
+                Reject recommendation
+              </button>
+            </div>
+
+            <div id="decision-reason-wrap" class="decision-reason-wrap" style="display:none;">
+              <label for="decision-reason" id="decision-reason-label" class="decision-reason-label">
+                Reason
+              </label>
+              <textarea
+                id="decision-reason"
+                class="decision-reason-input"
+                rows="3"
+                placeholder=""
+              ></textarea>
+            </div>
+
+            <p id="decision-error" class="decision-error" role="alert" style="display:none;"></p>
+
+            <div class="decision-actions">
+              <button type="button" id="btn-save-decision" class="btn btn-primary">
+                Save Decision
+              </button>
+            </div>
+
+            <p id="decision-saved-msg" class="decision-saved-msg" style="display:none;">
+              &#10003; Decision saved.
+            </p>
+          </div>
+
         </div>
       </div>
 

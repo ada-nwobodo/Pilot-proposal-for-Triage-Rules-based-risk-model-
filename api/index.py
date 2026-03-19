@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pathlib import Path
 from clinical_nlp.pipeline import ClinicalRiskOrchestrator
 from clinical_nlp.config import settings, supabase_settings
-from api.routes import assess, health, examples
+from api.routes import assess, health, examples, decisions
 
 
 @asynccontextmanager
@@ -41,6 +41,7 @@ app.add_middleware(
 app.include_router(health.router)
 app.include_router(assess.router)
 app.include_router(examples.router)
+app.include_router(decisions.router)
 
 # ── Frontend static files ─────────────────────────────────────────────────────
 frontend_path = Path(__file__).parent.parent / "frontend"
