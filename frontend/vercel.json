@@ -1,0 +1,9 @@
+{
+  "rewrites": [
+    { "source": "/assess",    "destination": "https://pilot-backend-zeta.vercel.app/assess"    },
+    { "source": "/decisions", "destination": "https://pilot-backend-zeta.vercel.app/decisions" },
+    { "source": "/health",    "destination": "https://pilot-backend-zeta.vercel.app/health"    },
+    { "source": "/examples",  "destination": "https://pilot-backend-zeta.vercel.app/examples"  },
+    { "source": "/config",    "destination": "https://pilot-backend-zeta.vercel.app/config"    }
+  ]
+}
