@@ -157,7 +157,15 @@ ALL_PATTERNS = PE_SYMPTOM_PATTERNS + PE_RISK_FACTOR_PATTERNS
 
 
 def build_spacy_pipeline(model_name: str = "en_core_web_sm") -> Language:
-    nlp = spacy.load(model_name, exclude=["ner"])
+    # Try direct module import first — required on Vercel where spaCy is vendored
+    # at /var/task/_vendor/spacy/ and cannot find models via spacy.load() discovery.
+    # Falls back to spacy.load() for all other environments.
+    try:
+        import importlib
+        _model_module = importlib.import_module(model_name.replace("-", "_"))
+        nlp = _model_module.load(exclude=["ner"])
+    except (ImportError, ModuleNotFoundError):
+        nlp = spacy.load(model_name, exclude=["ner"])
     ruler = nlp.add_pipe(
         "entity_ruler",
         before="senter" if "senter" in nlp.pipe_names else None,
