@@ -5,17 +5,20 @@
       "use": "@vercel/python"
     }
   ],
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "Access-Control-Allow-Origin",      "value": "https://pilot-frontend.vercel.app" },
+        { "key": "Access-Control-Allow-Methods",     "value": "GET, POST, OPTIONS" },
+        { "key": "Access-Control-Allow-Headers",     "value": "Content-Type, Authorization" }
+      ]
+    }
+  ],
   "routes": [
     {
       "src": "/(.*)",
       "methods": ["OPTIONS"],
-      "headers": {
-        "Access-Control-Allow-Origin": "https://pilot-frontend.vercel.app",
-        "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type, Authorization",
-        "Access-Control-Allow-Credentials": "true",
-        "Access-Control-Max-Age": "86400"
-      },
       "status": 200
     },
     {
