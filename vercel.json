@@ -5,22 +5,7 @@
       "use": "@vercel/python"
     }
   ],
-  "headers": [
-    {
-      "source": "/(.*)",
-      "headers": [
-        { "key": "Access-Control-Allow-Origin",      "value": "https://pilot-frontend.vercel.app" },
-        { "key": "Access-Control-Allow-Methods",     "value": "GET, POST, OPTIONS" },
-        { "key": "Access-Control-Allow-Headers",     "value": "Content-Type, Authorization" }
-      ]
-    }
-  ],
   "routes": [
-    {
-      "src": "/(.*)",
-      "methods": ["OPTIONS"],
-      "status": 200
-    },
     {
       "src": "/(.*)",
       "dest": "api/main.py"

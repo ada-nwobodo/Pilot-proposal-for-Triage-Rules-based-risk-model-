@@ -4,9 +4,10 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
+from fastapi.middleware.cors import CORSMiddleware
 from pathlib import Path
 from clinical_nlp.pipeline import ClinicalRiskOrchestrator
-from clinical_nlp.config import supabase_settings
+from clinical_nlp.config import settings, supabase_settings
 from api.routes import assess, health, examples, decisions
 
 logger = logging.getLogger(__name__)
@@ -31,11 +32,22 @@ app = FastAPI(
 )
 
 # ── CORS ──────────────────────────────────────────────────────────────────────
-# CORS is handled at the Vercel edge layer via vercel.json headers config.
-# This avoids duplicate header conflicts between Vercel and the Python app,
-# and ensures CORS headers are present even on Vercel-level 500 error pages.
-# For local development, frontend and backend share the same origin so no
-# CORS middleware is required.
+# Allowed origins come from RISK_ENGINE_ALLOWED_ORIGINS (comma-separated).
+# The production frontend URL is always included as a hardcoded fallback so
+# CORS works even if the env var is not read correctly on a given cold start.
+_origins = list({
+    o.strip()
+    for o in settings.allowed_origins.split(",")
+    if o.strip()
+} | {"https://pilot-frontend.vercel.app"})
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_origins,
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # ── Routes ────────────────────────────────────────────────────────────────────
 app.include_router(health.router)
