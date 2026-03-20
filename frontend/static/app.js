@@ -6,10 +6,13 @@
 'use strict';
 
 // ── Runtime config ─────────────────────────────────────────────────────────────
-// API_BASE is empty for same-origin deployments (FastAPI serves the frontend).
-// For split deployments (frontend on Vercel, backend on Render/Railway),
-// the /config endpoint provides the correct base URL at runtime.
-let API_BASE = '';
+// In production the frontend and backend are separate Vercel projects, so we
+// point directly at the backend URL.  Locally (localhost) API_BASE is empty so
+// all calls go to the same origin (FastAPI serves the frontend).
+const BACKEND_URL = 'https://pilot-backend-zeta.vercel.app';
+let API_BASE = window.location.hostname === 'pilot-frontend.vercel.app'
+  ? BACKEND_URL
+  : '';
 let _supabaseConfig = { supabase_url: '', supabase_anon_key: '' };
 
 async function loadRuntimeConfig() {
