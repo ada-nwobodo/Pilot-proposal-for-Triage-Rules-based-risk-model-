@@ -1,4 +1,5 @@
 from __future__ import annotations
+import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
@@ -9,12 +10,18 @@ from clinical_nlp.pipeline import ClinicalRiskOrchestrator
 from clinical_nlp.config import settings, supabase_settings
 from api.routes import assess, health, examples, decisions
 
+logger = logging.getLogger(__name__)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    app.state.pipeline = ClinicalRiskOrchestrator()
+    try:
+        app.state.pipeline = ClinicalRiskOrchestrator()
+        logger.info("Pipeline initialised successfully.")
+    except Exception as exc:
+        logger.error("Pipeline startup failed: %s", exc, exc_info=True)
+        app.state.pipeline = None   # health endpoint will report model_loaded=false
     yield
-    # cleanup if needed
 
 
 app = FastAPI(
