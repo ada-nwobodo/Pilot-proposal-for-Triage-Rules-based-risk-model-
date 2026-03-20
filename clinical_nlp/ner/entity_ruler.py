@@ -198,11 +198,19 @@ def build_spacy_pipeline(model_name: str = "en_core_web_sm") -> Language:
                 except Exception:
                     pass
 
+    # Strategy 4: blank English pipeline — always available, no download needed.
+    # Our entity extraction is fully rule-based so this works correctly.
+    # A sentencizer is added so ent.sent is available for negation detection.
     if nlp is None:
-        raise RuntimeError(
-            f"Could not load spaCy model '{model_name}' via any strategy. "
-            f"task_root={_task_root!r}, sys.path[:4]={sys.path[:4]}"
+        import logging
+        logging.getLogger(__name__).warning(
+            "Could not load '%s' — falling back to spacy.blank('en') + "
+            "sentencizer. Entity extraction will work correctly; statistical "
+            "NLP features (POS tags, dependency parse) are unavailable.",
+            model_name,
         )
+        nlp = spacy.blank("en")
+        nlp.add_pipe("sentencizer")
 
     ruler = nlp.add_pipe(
         "entity_ruler",
