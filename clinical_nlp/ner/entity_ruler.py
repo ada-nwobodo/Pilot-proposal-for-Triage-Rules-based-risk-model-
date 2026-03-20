@@ -157,15 +157,53 @@ ALL_PATTERNS = PE_SYMPTOM_PATTERNS + PE_RISK_FACTOR_PATTERNS
 
 
 def build_spacy_pipeline(model_name: str = "en_core_web_sm") -> Language:
-    # Try direct module import first — required on Vercel where spaCy is vendored
-    # at /var/task/_vendor/spacy/ and cannot find models via spacy.load() discovery.
-    # Falls back to spacy.load() for all other environments.
+    import sys, os, importlib, glob
+
+    # On Vercel/Lambda, pip-installed packages live at LAMBDA_TASK_ROOT
+    # (/var/task by default). Insert it explicitly so importlib can find the
+    # model package even when the runtime sys.path doesn't include it yet.
+    _task_root = os.environ.get("LAMBDA_TASK_ROOT", "/var/task")
+    if _task_root not in sys.path:
+        sys.path.insert(0, _task_root)
+
+    _module = model_name.replace("-", "_")
+    nlp = None
+
+    # Strategy 1: direct Python package import (fastest, most reliable)
     try:
-        import importlib
-        _model_module = importlib.import_module(model_name.replace("-", "_"))
-        nlp = _model_module.load(exclude=["ner"])
-    except (ImportError, ModuleNotFoundError):
-        nlp = spacy.load(model_name, exclude=["ner"])
+        _mod = importlib.import_module(_module)
+        nlp = _mod.load(exclude=["ner"])
+    except Exception:
+        pass
+
+    # Strategy 2: spaCy registry lookup (works in standard pip installs)
+    if nlp is None:
+        try:
+            nlp = spacy.load(model_name, exclude=["ner"])
+        except Exception:
+            pass
+
+    # Strategy 3: load model data from its on-disk path directly.
+    # The wheel installs: {task_root}/{module}/{module}-{version}/
+    # e.g. /var/task/en_core_web_sm/en_core_web_sm-3.8.0/
+    if nlp is None:
+        _candidates = glob.glob(
+            os.path.join(_task_root, _module, f"{_module}-*")
+        )
+        for _path in _candidates:
+            if os.path.isdir(_path):
+                try:
+                    nlp = spacy.load(_path, exclude=["ner"])
+                    break
+                except Exception:
+                    pass
+
+    if nlp is None:
+        raise RuntimeError(
+            f"Could not load spaCy model '{model_name}' via any strategy. "
+            f"task_root={_task_root!r}, sys.path[:4]={sys.path[:4]}"
+        )
+
     ruler = nlp.add_pipe(
         "entity_ruler",
         before="senter" if "senter" in nlp.pipe_names else None,
