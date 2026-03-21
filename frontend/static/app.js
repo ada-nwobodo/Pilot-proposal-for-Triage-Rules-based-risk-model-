@@ -51,6 +51,8 @@ const nextStepsList       = document.getElementById('next-steps-list');
 
 // Section 6: Clinical Decision
 const decisionSection     = document.getElementById('decision-section');
+const clinicianNameInput  = document.getElementById('clinician-name');
+const patientRefInput     = document.getElementById('patient-ref');
 const btnAccept           = document.getElementById('btn-accept');
 const btnReject           = document.getElementById('btn-reject');
 const decisionReasonWrap  = document.getElementById('decision-reason-wrap');
@@ -426,6 +428,8 @@ function resetDecision() {
   btnReject.classList.remove('btn-decision--active');
   decisionReasonInput.value = '';
   decisionReasonWrap.style.display = 'none';
+  clinicianNameInput.value = '';
+  patientRefInput.value = '';
   setDecisionError(null);
   decisionSavedMsg.style.display = 'none';
   _pendingDecision = null;
@@ -439,6 +443,13 @@ btnSaveDecision.addEventListener('click', async () => {
   decisionSavedMsg.style.display = 'none';
 
   // ── Validate ──────────────────────────────────────────────────────────────
+  const clinicianName = clinicianNameInput.value.trim();
+  if (!clinicianName) {
+    setDecisionError('Please enter your name before saving.');
+    clinicianNameInput.focus();
+    return;
+  }
+
   const decision = getActiveDecision();
   if (!decision) {
     setDecisionError('Please select Accept or Reject before saving.');
@@ -471,6 +482,8 @@ btnSaveDecision.addEventListener('click', async () => {
     next_steps:          _lastResult.next_steps || [],
     decision,
     decision_reason:     reason,
+    clinician_name:      clinicianName,
+    patient_ref:         patientRefInput.value.trim(),
   };
 
   // ── Submit ────────────────────────────────────────────────────────────────

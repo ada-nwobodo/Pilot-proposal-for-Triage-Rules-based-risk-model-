@@ -200,6 +200,35 @@
               Review the assessment above and record your clinical decision.
             </p>
 
+            <div class="decision-meta">
+              <div class="decision-meta-field">
+                <label for="clinician-name" class="decision-meta-label">
+                  Your name <span class="required-mark">*</span>
+                </label>
+                <input
+                  type="text"
+                  id="clinician-name"
+                  class="decision-meta-input"
+                  placeholder="e.g. Dr. A. Smith"
+                  autocomplete="name"
+                />
+              </div>
+              <div class="decision-meta-field">
+                <label for="patient-ref" class="decision-meta-label">
+                  Patient reference number <span class="optional-mark">(optional)</span>
+                </label>
+                <input
+                  type="text"
+                  id="patient-ref"
+                  class="decision-meta-input"
+                  placeholder="e.g. PT-001"
+                />
+                <p class="decision-meta-hint">
+                  Use an internal anonymised code only &mdash; no NHS numbers, names or other identifiers.
+                </p>
+              </div>
+            </div>
+
             <div class="decision-toggle-group" role="group" aria-label="Clinical decision">
               <button type="button" id="btn-accept" class="btn btn-decision" data-decision="accept">
                 Accept recommendation

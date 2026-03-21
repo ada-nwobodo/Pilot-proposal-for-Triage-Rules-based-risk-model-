@@ -20,6 +20,8 @@ class DecisionPayload(BaseModel):
     next_steps: list[str] = []
     decision: str                     # "accept" or "reject"
     decision_reason: str
+    clinician_name: str               # name of the clinician recording the decision
+    patient_ref: str = ""             # anonymised internal reference code (no PII)
 
     @field_validator("decision")
     @classmethod
@@ -33,4 +35,11 @@ class DecisionPayload(BaseModel):
     def validate_reason_not_empty(cls, v: str) -> str:
         if not v.strip():
             raise ValueError("decision_reason must not be empty")
+        return v.strip()
+
+    @field_validator("clinician_name")
+    @classmethod
+    def validate_clinician_name_not_empty(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("clinician_name must not be empty")
         return v.strip()

@@ -794,6 +794,59 @@ textarea {
   margin-bottom: 1rem;
 }
 
+/* Clinician name + patient ref fields */
+.decision-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.875rem;
+  margin-bottom: 1.25rem;
+}
+
+.decision-meta-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.decision-meta-label {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.required-mark {
+  color: #c0392b;
+  margin-left: 0.15rem;
+}
+
+.optional-mark {
+  font-weight: 400;
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+}
+
+.decision-meta-input {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 0.9rem;
+  color: var(--text-primary);
+  background: var(--bg-card);
+  transition: border-color 0.15s;
+}
+
+.decision-meta-input:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.15);
+}
+
+.decision-meta-hint {
+  font-size: 0.775rem;
+  color: var(--text-secondary);
+  margin: 0.2rem 0 0;
+}
+
 /* Toggle button group */
 .decision-toggle-group {
   display: flex;
