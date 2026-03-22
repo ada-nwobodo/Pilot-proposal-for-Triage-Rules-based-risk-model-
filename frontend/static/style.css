@@ -1234,3 +1234,50 @@ input[type="date"]:focus {
     grid-template-columns: 1fr 1fr;
   }
 }
+
+/* ============================================================
+   Study code display (shown after Save Decision)
+   ============================================================ */
+
+.study-code-box {
+  margin-top: 1rem;
+  background: #f0fdf4;
+  border: 2px solid #16a34a;
+  border-radius: var(--radius);
+  padding: 1rem 1.25rem;
+}
+
+.study-code-heading {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #166534;
+  margin-bottom: 0.625rem;
+}
+
+.study-code-value-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.75rem;
+}
+
+.study-code-value {
+  font-family: var(--font-mono);
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: #166534;
+  background: #dcfce7;
+  border: 1px solid #86efac;
+  border-radius: var(--radius);
+  padding: 0.375rem 0.875rem;
+}
+
+.study-code-instruction {
+  font-size: 0.8125rem;
+  color: #166534;
+  line-height: 1.5;
+}

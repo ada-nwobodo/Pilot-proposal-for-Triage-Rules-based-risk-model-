@@ -1,5 +1,7 @@
 from __future__ import annotations
 import logging
+import secrets
+import string
 from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException, Query
 import httpx
@@ -9,6 +11,24 @@ from clinical_nlp.config import supabase_settings
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+# ── Study code generation ──────────────────────────────────────────────────────
+
+_CODE_ALPHABET = string.ascii_uppercase + string.digits  # A-Z + 0-9, no ambiguous chars
+
+
+def generate_study_code() -> str:
+    """
+    Generate a unique server-side study code, e.g. PE-2025-A3F7K2.
+
+    Format: PE-{YEAR}-{6 random uppercase alphanumeric chars}
+    36^6 ≈ 2.1 billion combinations — negligible collision risk for a pilot.
+    Uses secrets.choice (cryptographically random) to avoid predictable sequences.
+    """
+    year   = datetime.now(timezone.utc).year
+    suffix = "".join(secrets.choice(_CODE_ALPHABET) for _ in range(6))
+    return f"PE-{year}-{suffix}"
+
 
 # ── Shared helpers ─────────────────────────────────────────────────────────────
 
@@ -45,20 +65,26 @@ def _require_supabase() -> None:
 async def save_decision(payload: DecisionPayload) -> dict:
     """
     Persist a completed PE assessment and the clinician's decision to Supabase.
-    Calls the Supabase REST API directly via httpx — no supabase-py package needed.
-    SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are read from backend env vars only;
-    the service role key is never returned to the frontend.
+
+    The patient_ref (study code) is always generated server-side and returned
+    in the response — any value sent by the client is ignored.  This eliminates
+    coordination problems when multiple nurses work concurrently.
+
+    Calls the Supabase REST API directly via httpx — no supabase-py needed.
     """
     _require_supabase()
 
+    # Always generate the study code server-side; never trust the client value.
+    study_code = generate_study_code()
+
     row = {
         **payload.model_dump(),
-        # Timestamp is set server-side — never trusted from the browser.
-        "created_at": datetime.now(timezone.utc).isoformat(),
+        "patient_ref": study_code,          # overwrite whatever the client sent
+        "created_at":  datetime.now(timezone.utc).isoformat(),
     }
 
     url = _rest_url("assessments")
-    logger.info("POST %s", url)
+    logger.info("POST %s  study_code=%s", url, study_code)
 
     async with httpx.AsyncClient(timeout=10.0) as client:
         try:
@@ -75,27 +101,28 @@ async def save_decision(payload: DecisionPayload) -> dict:
             detail=f"Database write failed: {resp.status_code} {resp.text}",
         )
 
-    data = resp.json()
+    data     = resp.json()
     saved_id = data[0].get("id") if isinstance(data, list) and data else None
-    logger.info("Row saved, id=%s", saved_id)
-    return {"status": "saved", "id": saved_id}
+    logger.info("Row saved, id=%s  study_code=%s", saved_id, study_code)
+
+    # Return the study code so the frontend can display it to the clinician.
+    return {"status": "saved", "id": saved_id, "study_code": study_code}
 
 
 # ── GET /decisions/lookup ──────────────────────────────────────────────────────
 
 @router.get("/decisions/lookup")
 async def lookup_assessment(
-    patient_ref: str = Query(..., min_length=1, description="Anonymised patient reference code"),
+    patient_ref: str = Query(..., min_length=1, description="Study code, e.g. PE-2025-A3F7K2"),
 ) -> dict:
     """
-    Find the most recent assessment for a given patient reference code.
+    Find the most recent assessment for a given study code.
     Returns a summary suitable for the outcome-recording page.
     Returns 404 if no matching assessment is found.
     """
     _require_supabase()
 
     url = _rest_url("assessments")
-    # Return only the fields needed for the summary + outcome status
     select_cols = (
         "id,created_at,risk_level,score,decision,decision_reason,"
         "clinician_name,patient_ref,suggested_diagnosis,"
@@ -103,19 +130,18 @@ async def lookup_assessment(
     )
     params = {
         "patient_ref": f"eq.{patient_ref}",
-        "order": "created_at.desc",
-        "limit": "1",
-        "select": select_cols,
+        "order":       "created_at.desc",
+        "limit":       "1",
+        "select":      select_cols,
     }
 
-    # Use read-only anon key for SELECT if available; fall back to service role
     read_headers = {
-        "apikey": supabase_settings.service_role_key,
+        "apikey":        supabase_settings.service_role_key,
         "Authorization": f"Bearer {supabase_settings.service_role_key}",
-        "Content-Type": "application/json",
+        "Content-Type":  "application/json",
     }
 
-    logger.info("GET %s patient_ref=%r", url, patient_ref)
+    logger.info("GET %s  patient_ref=%r", url, patient_ref)
     async with httpx.AsyncClient(timeout=10.0) as client:
         try:
             resp = await client.get(url, params=params, headers=read_headers)
@@ -135,7 +161,7 @@ async def lookup_assessment(
     if not rows:
         raise HTTPException(
             status_code=404,
-            detail=f"No assessment found for patient reference '{patient_ref}'.",
+            detail=f"No assessment found for study code '{patient_ref}'.",
         )
 
     return rows[0]
@@ -156,13 +182,12 @@ async def record_outcome(assessment_id: str, payload: OutcomePayload) -> dict:
         **payload.model_dump(exclude_none=False),
         "outcome_recorded_at": datetime.now(timezone.utc).isoformat(),
     }
-    # Remove None values so we don't overwrite existing data with nulls
     update = {k: v for k, v in update.items() if v is not None}
 
-    url = _rest_url("assessments")
+    url    = _rest_url("assessments")
     params = {"id": f"eq.{assessment_id}"}
 
-    logger.info("PATCH %s id=%r outcome=%r", url, assessment_id, payload.outcome)
+    logger.info("PATCH %s  id=%r  outcome=%r", url, assessment_id, payload.outcome)
     async with httpx.AsyncClient(timeout=10.0) as client:
         try:
             resp = await client.patch(url, json=update, params=params, headers=_headers())

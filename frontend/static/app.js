@@ -52,7 +52,6 @@ const nextStepsList       = document.getElementById('next-steps-list');
 // Section 6: Clinical Decision
 const decisionSection     = document.getElementById('decision-section');
 const clinicianNameInput  = document.getElementById('clinician-name');
-const patientRefInput     = document.getElementById('patient-ref');
 const btnAccept           = document.getElementById('btn-accept');
 const btnReject           = document.getElementById('btn-reject');
 const decisionReasonWrap  = document.getElementById('decision-reason-wrap');
@@ -61,6 +60,9 @@ const decisionReasonInput = document.getElementById('decision-reason');
 const decisionError       = document.getElementById('decision-error');
 const btnSaveDecision     = document.getElementById('btn-save-decision');
 const decisionSavedMsg    = document.getElementById('decision-saved-msg');
+const studyCodeBox        = document.getElementById('study-code-box');
+const studyCodeValueEl    = document.getElementById('study-code-value');
+const btnCopyCode         = document.getElementById('btn-copy-code');
 
 // Vital sign input elements
 const vitalInputIds = [
@@ -429,14 +431,34 @@ function resetDecision() {
   decisionReasonInput.value = '';
   decisionReasonWrap.style.display = 'none';
   clinicianNameInput.value = '';
-  patientRefInput.value = '';
   setDecisionError(null);
   decisionSavedMsg.style.display = 'none';
+  studyCodeBox.style.display = 'none';
+  studyCodeValueEl.textContent = '';
   _pendingDecision = null;
 }
 
 btnAccept.addEventListener('click', () => selectDecision('accept'));
 btnReject.addEventListener('click', () => selectDecision('reject'));
+
+// ── Copy study code to clipboard ───────────────────────────────────────────────
+
+btnCopyCode.addEventListener('click', () => {
+  const code = studyCodeValueEl.textContent;
+  if (!code) return;
+  navigator.clipboard.writeText(code).then(() => {
+    btnCopyCode.textContent = 'Copied!';
+    setTimeout(() => { btnCopyCode.textContent = 'Copy'; }, 2000);
+  }).catch(() => {
+    // Fallback: select the text so the user can copy manually
+    const range = document.createRange();
+    range.selectNodeContents(studyCodeValueEl);
+    window.getSelection().removeAllRanges();
+    window.getSelection().addRange(range);
+    btnCopyCode.textContent = 'Select all — then Ctrl/Cmd+C';
+    setTimeout(() => { btnCopyCode.textContent = 'Copy'; }, 3000);
+  });
+});
 
 btnSaveDecision.addEventListener('click', async () => {
   setDecisionError(null);
@@ -483,7 +505,7 @@ btnSaveDecision.addEventListener('click', async () => {
     decision,
     decision_reason:     reason,
     clinician_name:      clinicianName,
-    patient_ref:         patientRefInput.value.trim(),
+    // patient_ref is generated server-side — not sent from the client
   };
 
   // ── Submit ────────────────────────────────────────────────────────────────
@@ -503,10 +525,17 @@ btnSaveDecision.addEventListener('click', async () => {
       throw new Error(detail);
     }
 
-    // Success
+    // Success — show the server-generated study code prominently
+    const respData = await response.json().catch(() => ({}));
     _pendingDecision = payload;
     decisionSavedMsg.style.display = 'block';
     btnSaveDecision.textContent = 'Saved';
+
+    if (respData.study_code) {
+      studyCodeValueEl.textContent = respData.study_code;
+      studyCodeBox.style.display = 'block';
+      studyCodeBox.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
 
   } catch (err) {
     setDecisionError(`Save failed: ${err.message}`);

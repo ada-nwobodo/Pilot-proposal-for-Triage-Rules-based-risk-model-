@@ -216,22 +216,6 @@
                   autocomplete="name"
                 />
               </div>
-              <div class="decision-meta-field">
-                <label for="patient-ref" class="decision-meta-label">
-                  Patient reference number <span class="optional-mark">(optional)</span>
-                </label>
-                <input
-                  type="text"
-                  id="patient-ref"
-                  class="decision-meta-input"
-                  placeholder="e.g. PT-001"
-                />
-                <p class="decision-meta-hint">
-                  Enter a locally-assigned study code only (e.g. PE-2025-001).
-                  Do <strong>not</strong> enter hospital numbers, NHS numbers, names or any other direct identifiers.
-                  Keep a separate local record of the mapping between your study codes and patients.
-                </p>
-              </div>
             </div>
 
             <div class="decision-toggle-group" role="group" aria-label="Clinical decision">
@@ -266,6 +250,21 @@
             <p id="decision-saved-msg" class="decision-saved-msg" style="display:none;">
               &#10003; Decision saved.
             </p>
+
+            <div id="study-code-box" class="study-code-box" style="display:none;">
+              <p class="study-code-heading">Study code for this patient</p>
+              <div class="study-code-value-row">
+                <span id="study-code-value" class="study-code-value"></span>
+                <button type="button" id="btn-copy-code" class="btn btn-secondary btn-sm">
+                  Copy
+                </button>
+              </div>
+              <p class="study-code-instruction">
+                Write this in your local log <strong>before closing this page</strong>.
+                You will need it to record the patient&rsquo;s outcome later.
+                Do <strong>not</strong> record it next to the patient&rsquo;s name or hospital number.
+              </p>
+            </div>
           </div>
 
         </div>
