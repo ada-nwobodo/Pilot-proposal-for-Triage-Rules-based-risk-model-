@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Record Patient Outcome — PE Triage NLP Engine</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+
+  <header class="page-header">
+    <div>
+      <h1>Record Patient Outcome</h1>
+      <p class="subtitle">PE Triage NLP Engine &mdash; Follow-up outcome recording</p>
+    </div>
+    <div class="header-actions">
+      <a href="/" class="btn btn-secondary btn-sm">&#8592; Back to Assessment</a>
+      <span class="header-badge">PE Only &bull; Synthetic Demo</span>
+    </div>
+  </header>
+
+  <main class="main-container outcome-container">
+
+    <!-- Info banner -->
+    <div class="outcome-info-banner">
+      <strong>Why record an outcome?</strong>
+      Linking final diagnoses to initial engine recommendations allows calculation of
+      sensitivity, specificity, PPV and NPV — measuring how well the rules engine performs in practice.
+      Use the patient reference number assigned at the time of assessment.
+    </div>
+
+    <!-- Step 1: Lookup -->
+    <div class="card outcome-card">
+      <div class="card-header">
+        <span class="card-title">Step 1 &mdash; Find Assessment</span>
+      </div>
+      <div class="card-body">
+        <p class="outcome-step-note">
+          Enter the anonymised patient reference number used during the original assessment.
+        </p>
+        <div class="outcome-lookup-row">
+          <div class="outcome-lookup-field">
+            <label for="lookup-ref">Patient reference number</label>
+            <input
+              type="text"
+              id="lookup-ref"
+              placeholder="e.g. PT-001"
+              autocomplete="off"
+              spellcheck="false"
+            />
+          </div>
+          <button type="button" id="btn-lookup" class="btn btn-primary">
+            Look Up
+          </button>
+        </div>
+        <div id="lookup-error" class="outcome-error" role="alert" style="display:none;"></div>
+      </div>
+    </div>
+
+    <!-- Step 2: Assessment summary (hidden until lookup succeeds) -->
+    <div id="assessment-summary-card" class="card outcome-card" style="display:none;">
+      <div class="card-header">
+        <span class="card-title">Step 2 &mdash; Assessment Summary</span>
+        <span id="summary-already-recorded" class="outcome-already-badge" style="display:none;">
+          Outcome already recorded
+        </span>
+      </div>
+      <div class="card-body">
+        <div class="summary-grid">
+          <div class="summary-field">
+            <span class="summary-label">Patient ref</span>
+            <span id="sum-patient-ref" class="summary-value"></span>
+          </div>
+          <div class="summary-field">
+            <span class="summary-label">Assessed</span>
+            <span id="sum-created-at" class="summary-value"></span>
+          </div>
+          <div class="summary-field">
+            <span class="summary-label">Clinician</span>
+            <span id="sum-clinician" class="summary-value"></span>
+          </div>
+          <div class="summary-field">
+            <span class="summary-label">Engine risk level</span>
+            <span id="sum-risk-level" class="summary-value"></span>
+          </div>
+          <div class="summary-field">
+            <span class="summary-label">Engine score</span>
+            <span id="sum-score" class="summary-value"></span>
+          </div>
+          <div class="summary-field">
+            <span class="summary-label">Clinician decision</span>
+            <span id="sum-decision" class="summary-value"></span>
+          </div>
+          <div class="summary-field summary-field--full">
+            <span class="summary-label">Suggested diagnosis</span>
+            <span id="sum-suggested-diagnosis" class="summary-value"></span>
+          </div>
+        </div>
+
+        <!-- Already-recorded outcome (shown if outcome already exists) -->
+        <div id="existing-outcome-box" class="existing-outcome-box" style="display:none;">
+          <p class="existing-outcome-title">Previously recorded outcome</p>
+          <div class="summary-grid">
+            <div class="summary-field">
+              <span class="summary-label">Outcome</span>
+              <span id="sum-outcome" class="summary-value"></span>
+            </div>
+            <div class="summary-field">
+              <span class="summary-label">Confirming test</span>
+              <span id="sum-confirming-test" class="summary-value"></span>
+            </div>
+            <div class="summary-field">
+              <span class="summary-label">Outcome date</span>
+              <span id="sum-outcome-date" class="summary-value"></span>
+            </div>
+            <div class="summary-field">
+              <span class="summary-label">Recorded at</span>
+              <span id="sum-outcome-recorded-at" class="summary-value"></span>
+            </div>
+          </div>
+          <p class="existing-outcome-note">
+            An outcome has already been recorded. Submitting again will overwrite it.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 3: Outcome form (hidden until lookup succeeds) -->
+    <div id="outcome-form-card" class="card outcome-card" style="display:none;">
+      <div class="card-header">
+        <span class="card-title">Step 3 &mdash; Record Outcome</span>
+      </div>
+      <div class="card-body">
+        <p class="outcome-step-note">
+          Complete the fields below once investigations and final diagnosis are confirmed.
+        </p>
+
+        <div class="outcome-form-grid">
+
+          <!-- Final diagnosis -->
+          <div class="outcome-form-field">
+            <label for="outcome-diagnosis">
+              Final diagnosis <span class="required-mark">*</span>
+            </label>
+            <select id="outcome-diagnosis">
+              <option value="">— Select outcome —</option>
+              <option value="pe_confirmed">PE confirmed</option>
+              <option value="pe_excluded">PE excluded</option>
+              <option value="alternative_diagnosis">Alternative diagnosis identified</option>
+              <option value="inconclusive">Inconclusive / investigations ongoing</option>
+            </select>
+          </div>
+
+          <!-- Confirming investigation -->
+          <div class="outcome-form-field">
+            <label for="outcome-test">
+              Confirming investigation <span class="optional-mark">(optional)</span>
+            </label>
+            <select id="outcome-test">
+              <option value="">— Select investigation —</option>
+              <option value="ctpa">CTPA</option>
+              <option value="vq_scan">V/Q scan</option>
+              <option value="d_dimer_negative">D-dimer (negative)</option>
+              <option value="echo">Echocardiogram</option>
+              <option value="clinical_judgement">Clinical judgement</option>
+              <option value="other">Other</option>
+            </select>
+          </div>
+
+          <!-- Outcome date -->
+          <div class="outcome-form-field">
+            <label for="outcome-date">
+              Date of confirmed outcome <span class="optional-mark">(optional)</span>
+            </label>
+            <input type="date" id="outcome-date" />
+          </div>
+
+          <!-- Notes -->
+          <div class="outcome-form-field outcome-form-field--full">
+            <label for="outcome-notes">
+              Notes <span class="optional-mark">(optional)</span>
+            </label>
+            <textarea
+              id="outcome-notes"
+              rows="3"
+              placeholder="Any additional context about the final diagnosis or investigation findings…"
+            ></textarea>
+          </div>
+
+        </div><!-- /outcome-form-grid -->
+
+        <div id="outcome-submit-error" class="outcome-error" role="alert" style="display:none;"></div>
+
+        <div class="outcome-actions">
+          <button type="button" id="btn-submit-outcome" class="btn btn-primary">
+            Save Outcome
+          </button>
+        </div>
+
+        <p id="outcome-saved-msg" class="outcome-saved-msg" style="display:none;">
+          &#10003; Outcome saved successfully.
+        </p>
+
+      </div>
+    </div>
+
+  </main>
+
+  <script src="/static/outcome.js"></script>
+</body>
+</html>
