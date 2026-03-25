@@ -23,6 +23,11 @@ class DecisionPayload(BaseModel):
     clinician_name: str               # name of the clinician recording the decision
     patient_ref: str = ""             # anonymised internal reference code (no PII)
 
+    # Encounter timing — optional; only present if clinician used Start Encounter
+    encounter_start_ts:   Optional[str] = None  # ISO 8601 UTC string
+    encounter_end_ts:     Optional[str] = None  # ISO 8601 UTC string
+    encounter_duration_s: Optional[int] = None  # whole seconds
+
     @field_validator("decision")
     @classmethod
     def validate_decision(cls, v: str) -> str:

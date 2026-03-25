@@ -12,10 +12,13 @@
     <div>
       <h1>Pulmonary Embolism Risk Assessment</h1>
       <p class="subtitle">PE Triage NLP Engine &mdash; Rules-based risk assessment from free-text notes</p>
+      <span class="header-badge">PE Only &bull; Synthetic Demo</span>
     </div>
     <div class="header-actions">
+      <button type="button" id="btn-start-encounter" class="btn btn-start-encounter">
+        &#9654; Start Encounter
+      </button>
       <a href="/outcome.html" class="header-nav-link">Record Patient Outcome</a>
-      <span class="header-badge">PE Only &bull; Synthetic Demo</span>
     </div>
   </header>
 
@@ -264,6 +267,7 @@
                 You will need it to record the patient&rsquo;s outcome later.
                 Do <strong>not</strong> record it next to the patient&rsquo;s name or hospital number.
               </p>
+              <div id="encounter-timing-summary" class="encounter-timing-summary" style="display:none;"></div>
             </div>
           </div>
 

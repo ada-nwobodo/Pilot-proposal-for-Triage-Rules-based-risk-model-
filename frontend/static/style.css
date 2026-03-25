@@ -88,12 +88,14 @@ body {
 }
 
 .header-badge {
+  display: inline-block;
+  margin-top: 0.375rem;
   background: #eff6ff;
   color: var(--color-primary);
   border: 1px solid #bfdbfe;
   border-radius: 9999px;
-  padding: 0.25rem 0.75rem;
-  font-size: 0.75rem;
+  padding: 0.2rem 0.65rem;
+  font-size: 0.7rem;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -1024,6 +1026,68 @@ input[type="date"]:focus {
 .header-nav-link:hover {
   background: var(--color-primary);
   color: #fff;
+}
+
+/* Start Encounter button — header */
+.btn-start-encounter {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: #166534;
+  background: #dcfce7;
+  border: 1px solid #86efac;
+  border-radius: var(--radius);
+  padding: 0.375rem 0.875rem;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  white-space: nowrap;
+}
+
+.btn-start-encounter:hover:not(:disabled) {
+  background: #bbf7d0;
+}
+
+/* State after being clicked — static confirmation, no pointer */
+.btn-start-encounter--started {
+  color: var(--color-text-muted);
+  background: var(--color-bg);
+  border-color: var(--color-border);
+  cursor: not-allowed;
+  opacity: 0.75;
+}
+
+/* ============================================================
+   Encounter timing summary (inside study code box)
+   ============================================================ */
+
+.encounter-timing-summary {
+  margin-top: 0.875rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--color-border);
+}
+
+.timing-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.8125rem;
+  color: var(--color-text-muted);
+  padding: 0.125rem 0;
+}
+
+.timing-row--total {
+  margin-top: 0.25rem;
+  padding-top: 0.25rem;
+  border-top: 1px dashed var(--color-border);
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.timing-label {
+  margin-right: 1rem;
+}
+
+.timing-value {
+  font-variant-numeric: tabular-nums;
+  font-family: var(--font-mono);
 }
 
 /* ============================================================

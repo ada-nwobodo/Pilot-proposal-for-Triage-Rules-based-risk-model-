@@ -62,7 +62,9 @@ const btnSaveDecision     = document.getElementById('btn-save-decision');
 const decisionSavedMsg    = document.getElementById('decision-saved-msg');
 const studyCodeBox        = document.getElementById('study-code-box');
 const studyCodeValueEl    = document.getElementById('study-code-value');
-const btnCopyCode         = document.getElementById('btn-copy-code');
+const btnCopyCode             = document.getElementById('btn-copy-code');
+const btnStartEncounter       = document.getElementById('btn-start-encounter');
+const encounterTimingSummary  = document.getElementById('encounter-timing-summary');
 
 // Vital sign input elements
 const vitalInputIds = [
@@ -83,11 +85,12 @@ const VITAL_FIELD_MAP = {
 
 // ── State ─────────────────────────────────────────────────────────────────────
 
-let exampleIndex      = 0;
-let cachedExamples    = null;
-let _lastResult       = null;   // most recent /assess API response
-let _lastNoteText     = null;   // clinical note text used for the last analysis
-let _pendingDecision  = null;   // { decision, decision_reason } — ready for Supabase
+let exampleIndex        = 0;
+let cachedExamples      = null;
+let _lastResult         = null;   // most recent /assess API response
+let _lastNoteText       = null;   // clinical note text used for the last analysis
+let _pendingDecision    = null;   // { decision, decision_reason } — ready for Supabase
+let _encounterStartTime = null;   // Date when clinician clicked Start Encounter
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -441,6 +444,15 @@ function resetDecision() {
 btnAccept.addEventListener('click', () => selectDecision('accept'));
 btnReject.addEventListener('click', () => selectDecision('reject'));
 
+// ── Event: start encounter ────────────────────────────────────────────────────
+
+btnStartEncounter.addEventListener('click', () => {
+  _encounterStartTime = new Date();
+  btnStartEncounter.textContent = '\u2713 Encounter started';
+  btnStartEncounter.classList.add('btn-start-encounter--started');
+  btnStartEncounter.disabled = true;
+});
+
 // ── Copy study code to clipboard ───────────────────────────────────────────────
 
 btnCopyCode.addEventListener('click', () => {
@@ -486,6 +498,12 @@ btnSaveDecision.addEventListener('click', async () => {
   }
 
   // ── Build payload ─────────────────────────────────────────────────────────
+  // Capture encounter end time at the moment Save is clicked (before async).
+  const _encounterEndTime  = new Date();
+  const _encounterDuration = _encounterStartTime
+    ? Math.round((_encounterEndTime - _encounterStartTime) / 1000)
+    : null;
+
   // detected_features: text of scored (non-negated, non-duplicate) entities
   const detectedFeatures = (_lastResult.entity_contributions || [])
     .filter(c => !c.is_negated && c.score_contribution > 0)
@@ -495,17 +513,23 @@ btnSaveDecision.addEventListener('click', async () => {
   const abnormalVitals = (_lastResult.vitals_flags || []).map(f => f.reason);
 
   const payload = {
-    clinical_note:       _lastNoteText || '',
-    detected_features:   detectedFeatures,
-    abnormal_vitals:     abnormalVitals,
-    score:               _lastResult.combined_score,
-    risk_level:          _lastResult.risk_level,
-    suggested_diagnosis: _lastResult.suggested_diagnosis || null,
-    next_steps:          _lastResult.next_steps || [],
+    clinical_note:         _lastNoteText || '',
+    detected_features:     detectedFeatures,
+    abnormal_vitals:       abnormalVitals,
+    score:                 _lastResult.combined_score,
+    risk_level:            _lastResult.risk_level,
+    suggested_diagnosis:   _lastResult.suggested_diagnosis || null,
+    next_steps:            _lastResult.next_steps || [],
     decision,
-    decision_reason:     reason,
-    clinician_name:      clinicianName,
+    decision_reason:       reason,
+    clinician_name:        clinicianName,
     // patient_ref is generated server-side — not sent from the client
+    // Encounter timing — only included if Start Encounter was clicked
+    ...(_encounterStartTime && {
+      encounter_start_ts:   _encounterStartTime.toISOString(),
+      encounter_end_ts:     _encounterEndTime.toISOString(),
+      encounter_duration_s: _encounterDuration,
+    }),
   };
 
   // ── Submit ────────────────────────────────────────────────────────────────
@@ -535,6 +559,20 @@ btnSaveDecision.addEventListener('click', async () => {
       studyCodeValueEl.textContent = respData.study_code;
       studyCodeBox.style.display = 'block';
       studyCodeBox.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    // Render encounter timing summary if Start Encounter was clicked
+    if (_encounterStartTime) {
+      const fmt = (d) => d.toLocaleTimeString([], {
+        hour: '2-digit', minute: '2-digit', second: '2-digit',
+      });
+      const mins = Math.floor(_encounterDuration / 60);
+      const secs = _encounterDuration % 60;
+      encounterTimingSummary.innerHTML =
+        `<div class="timing-row"><span class="timing-label">Encounter started:</span><span class="timing-value">${fmt(_encounterStartTime)}</span></div>` +
+        `<div class="timing-row"><span class="timing-label">Decision saved:</span><span class="timing-value">${fmt(_encounterEndTime)}</span></div>` +
+        `<div class="timing-row timing-row--total"><span class="timing-label">Total duration:</span><span class="timing-value">${mins} min ${secs} sec</span></div>`;
+      encounterTimingSummary.style.display = 'block';
     }
 
   } catch (err) {
@@ -643,4 +681,12 @@ clearBtn.addEventListener('click', () => {
   resetDecision();
   btnSaveDecision.disabled = false;
   btnSaveDecision.textContent = 'Save Decision';
+
+  // Reset encounter timing for next patient
+  _encounterStartTime = null;
+  btnStartEncounter.textContent = '\u25BA Start Encounter';
+  btnStartEncounter.classList.remove('btn-start-encounter--started');
+  btnStartEncounter.disabled = false;
+  encounterTimingSummary.style.display = 'none';
+  encounterTimingSummary.innerHTML = '';
 });
