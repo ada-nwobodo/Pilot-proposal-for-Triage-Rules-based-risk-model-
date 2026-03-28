@@ -12,7 +12,7 @@ from .entity_scorer import deduplicate_and_score, canonical_group
 RISK_THRESHOLDS = [
     (RiskLevel.CRITICAL, 5),
     (RiskLevel.HIGH,     3),
-    (RiskLevel.MEDIUM,   1),
+    (RiskLevel.MEDIUM,   2),
     (RiskLevel.LOW,      0),
 ]
 
