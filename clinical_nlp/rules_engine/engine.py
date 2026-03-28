@@ -26,14 +26,18 @@ PE_NEXT_STEPS = [
     "D-dimer",
 ]
 
-# Investigations recommended for LOW risk with score = 1
-LOW_RISK_NEXT_STEPS = [
+# Investigations recommended for LOW risk score = 1 with chest pain or collapse
+LOW_RISK_CARDIAC_NEXT_STEPS = [
     "ECG",
     "Insert wide bore cannula (pink)",
     "FBC",
     "U&E",
     "LFT",
+    "Troponin",
 ]
+
+# Canonical groups that trigger cardiac-adjacent investigations at LOW risk score = 1
+CARDIAC_SYMPTOM_GROUPS = {"chest_pain", "syncope_collapse"}
 
 
 def assess(
@@ -64,7 +68,15 @@ def assess(
     if risk_level != RiskLevel.LOW:
         next_steps = PE_NEXT_STEPS
     elif combined_score >= 1:
-        next_steps = LOW_RISK_NEXT_STEPS
+        has_cardiac_symptom = any(
+            canonical_group(ent.text) in CARDIAC_SYMPTOM_GROUPS
+            for ent, score in scored_entities
+            if score == 1
+        )
+        if has_cardiac_symptom:
+            next_steps = LOW_RISK_CARDIAC_NEXT_STEPS
+        else:
+            next_steps = ["Await clinician review — no initial investigations required"]
     else:
         next_steps = []
 
