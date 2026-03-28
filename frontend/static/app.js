@@ -273,7 +273,7 @@ function renderSuggestedDiagnosis(diagnosis, riskLevel) {
 // ── Section 5: Recommended next steps ────────────────────────────────────────
 
 // Blood-test items are grouped visually under a "Blood tests:" parent entry.
-const BLOOD_TESTS = new Set(['FBC', 'U&E', 'Clotting', 'D-dimer']);
+const BLOOD_TESTS = new Set(['FBC', 'U&E', 'Clotting', 'D-dimer', 'LFT', 'Troponin']);
 
 function renderNextSteps(steps) {
   nextStepsList.innerHTML = '';
