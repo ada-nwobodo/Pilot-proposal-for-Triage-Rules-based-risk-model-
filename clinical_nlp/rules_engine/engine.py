@@ -26,6 +26,15 @@ PE_NEXT_STEPS = [
     "D-dimer",
 ]
 
+# Investigations recommended for LOW risk with score = 1
+LOW_RISK_NEXT_STEPS = [
+    "ECG",
+    "Insert wide bore cannula (pink)",
+    "FBC",
+    "U&E",
+    "LFT",
+]
+
 
 def assess(
     entities: list[AnnotatedEntity],
@@ -52,7 +61,12 @@ def assess(
     ]
 
     suggested_diagnosis = _suggested_diagnosis(risk_level)
-    next_steps = PE_NEXT_STEPS if risk_level != RiskLevel.LOW else []
+    if risk_level != RiskLevel.LOW:
+        next_steps = PE_NEXT_STEPS
+    elif combined_score >= 1:
+        next_steps = LOW_RISK_NEXT_STEPS
+    else:
+        next_steps = []
 
     reasoning = _build_reasoning(risk_level, contributions, vitals_flags)
 
