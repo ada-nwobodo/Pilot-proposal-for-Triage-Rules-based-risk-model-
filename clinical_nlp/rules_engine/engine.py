@@ -26,7 +26,7 @@ PE_NEXT_STEPS = [
     "D-dimer",
 ]
 
-# Investigations recommended for LOW risk score = 1 with chest pain or collapse
+# Investigations recommended for LOW risk score = 1 with chest pain (cardiac screen)
 LOW_RISK_CARDIAC_NEXT_STEPS = [
     "ECG",
     "Insert wide bore cannula (pink)",
@@ -36,8 +36,12 @@ LOW_RISK_CARDIAC_NEXT_STEPS = [
     "Troponin",
 ]
 
-# Canonical groups that trigger cardiac-adjacent investigations at LOW risk score = 1
-CARDIAC_SYMPTOM_GROUPS = {"chest_pain", "syncope_collapse"}
+# Canonical groups that trigger cardiac-adjacent investigations at LOW risk score = 1.
+# NOTE: syncope_collapse has been intentionally removed from this set.
+# Any syncope or collapse is now hard-escalated to minimum Very Urgent via
+# Layer 2 symptom flags (symptom_flags.py) and will never reach the LOW risk
+# cardiac path. Leaving it here would produce an unsafe LOW priority assignment.
+CARDIAC_SYMPTOM_GROUPS = {"chest_pain"}
 
 
 def assess(

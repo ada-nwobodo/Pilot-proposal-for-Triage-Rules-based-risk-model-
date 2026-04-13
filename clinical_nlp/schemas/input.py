@@ -11,6 +11,14 @@ class VitalSigns(BaseModel):
     spo2: Optional[float] = Field(None, description="Oxygen saturation %")
     temperature: Optional[float] = Field(None, description="Temperature in Celsius")
     gcs: Optional[int] = Field(None, description="Glasgow Coma Scale 3-15")
+    known_copd: Optional[bool] = Field(
+        None,
+        description=(
+            "Whether the patient has a known diagnosis of COPD. "
+            "True = confirmed COPD; False = confirmed no COPD; "
+            "None = not answered / unknown (treated conservatively as False)."
+        ),
+    )
 
 
 class ClinicalInput(BaseModel):

@@ -105,6 +105,19 @@
                 <span class="unit">%</span>
               </div>
 
+              <!-- COPD clarification — sits directly below SpO2 -->
+              <div class="form-field form-field--copd" id="copd-field">
+                <label for="known-copd" class="copd-label">
+                  Known COPD?
+                  <span class="copd-hint">(relevant if SpO&sup2; &lt; 90%)</span>
+                </label>
+                <select id="known-copd" class="copd-select">
+                  <option value="">Not answered</option>
+                  <option value="false">No / Not known</option>
+                  <option value="true">Yes &mdash; known COPD</option>
+                </select>
+              </div>
+
               <div class="form-field">
                 <label for="temperature">Temperature <span class="not-scored">(not PE-scored)</span></label>
                 <input type="number" id="temperature" name="temperature"
@@ -136,6 +149,24 @@
 
     <!-- Error display -->
     <div id="error-box" class="error-box" role="alert"></div>
+
+    <!-- ── Priority Banner (Tier 1) — full-width MTS priority display ─────── -->
+    <div id="priority-banner" class="priority-banner priority-banner--hidden" role="status" aria-live="polite">
+      <div class="priority-banner-inner">
+        <div class="priority-banner-left">
+          <span id="priority-tier-label" class="priority-tier-label">—</span>
+          <span id="priority-wait-label" class="priority-wait-label">—</span>
+        </div>
+        <div class="priority-banner-right">
+          <span id="priority-basis-label" class="priority-basis-label"></span>
+        </div>
+      </div>
+      <!-- COPD clarification notice — shown when known_copd was not answered -->
+      <div id="copd-notice" class="copd-notice" style="display:none;">
+        &#9888; COPD status not answered &mdash; Immediate priority assigned by default for safety.
+        Please confirm COPD status using the field above and re-analyse if needed.
+      </div>
+    </div>
 
     <!-- ── Results ─────────────────────────────────────────────────────────── -->
     <section id="results-section" class="results-hidden">
@@ -173,6 +204,13 @@
             <p id="empty-vitals" class="empty-note" style="display:none;">
               No PE-relevant vital sign abnormalities detected.
             </p>
+          </div>
+
+          <!-- Section 2b: Chest Pain Safety Screen (shown only when triggered) -->
+          <div id="chest-pain-safety-section" class="result-section chest-pain-safety-section" style="display:none;">
+            <p class="section-title">&#9888; Chest Pain &mdash; Alternative Diagnosis Screen</p>
+            <p id="chest-pain-safety-note" class="chest-pain-safety-note"></p>
+            <ul id="chest-pain-flags-list" class="chest-pain-flags-list"></ul>
           </div>
 
           <!-- Section 3: PE Risk Assessment -->

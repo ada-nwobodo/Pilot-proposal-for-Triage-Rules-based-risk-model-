@@ -48,3 +48,39 @@ class RiskAssessment(BaseModel):
     suggested_diagnosis: Optional[str] = None
     next_steps: list[str] = []
     processing_time_ms: float = 0.0
+
+    # ── Priority tier fields (populated by priority_mapper; None until set) ──
+    priority_tier: Optional[str] = Field(
+        None,
+        description=(
+            "MTS-derived priority tier: IMMEDIATE | VERY_URGENT | URGENT | "
+            "STANDARD | NON_URGENT. Populated after Layers 1-3 are applied."
+        ),
+    )
+    max_wait_minutes: Optional[int] = Field(
+        None,
+        description="Maximum safe waiting time in minutes derived from priority_tier.",
+    )
+    priority_colour: Optional[str] = Field(
+        None,
+        description="Display colour for priority banner: RED | ORANGE | YELLOW | GREEN | BLUE.",
+    )
+    priority_basis: Optional[str] = Field(
+        None,
+        description="Human-readable explanation of what drove the final priority tier.",
+    )
+    chest_pain_safety_flags: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Red flag differentials detected by the chest pain safety screen. "
+            "Empty list if screen did not trigger or no flags found."
+        ),
+    )
+    clarification_required: Optional[bool] = Field(
+        None,
+        description="True if the COPD clarification question should be shown to the nurse.",
+    )
+    clarification_question: Optional[str] = Field(
+        None,
+        description="Populated when clarification_required is True.",
+    )

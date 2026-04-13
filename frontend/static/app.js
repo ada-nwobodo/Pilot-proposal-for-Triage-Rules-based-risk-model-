@@ -83,6 +83,17 @@ const VITAL_FIELD_MAP = {
   'gcs':              'gcs',
 };
 
+// Priority layer DOM references (new — existing refs above unchanged)
+const priorityBanner      = document.getElementById('priority-banner');
+const priorityTierLabel   = document.getElementById('priority-tier-label');
+const priorityWaitLabel   = document.getElementById('priority-wait-label');
+const priorityBasisLabel  = document.getElementById('priority-basis-label');
+const copdNotice          = document.getElementById('copd-notice');
+const copdSelect          = document.getElementById('known-copd');
+const chestPainSection    = document.getElementById('chest-pain-safety-section');
+const chestPainNote       = document.getElementById('chest-pain-safety-note');
+const chestPainFlagsList  = document.getElementById('chest-pain-flags-list');
+
 // ── State ─────────────────────────────────────────────────────────────────────
 
 let exampleIndex        = 0;
@@ -131,6 +142,12 @@ function buildPayload() {
       }
     }
   }
+
+  // Include known_copd from the COPD select (new field — additive)
+  const copdVal = copdSelect ? copdSelect.value : '';
+  if (copdVal === 'true')  vitals['known_copd'] = true;
+  if (copdVal === 'false') vitals['known_copd'] = false;
+  // Empty string → not answered → omit field → backend receives null → safe default
 
   return {
     note_text: noteText,
@@ -314,6 +331,87 @@ function renderNextSteps(steps) {
   }
 }
 
+// ── Priority banner (Tier 1) ──────────────────────────────────────────────────
+
+const TIER_DISPLAY = {
+  IMMEDIATE:   { label: '🔴 IMMEDIATE',    wait: 'See within 0 minutes'   },
+  VERY_URGENT: { label: '🟠 VERY URGENT',  wait: 'See within 10 minutes'  },
+  URGENT:      { label: '🟡 URGENT',       wait: 'See within 60 minutes'  },
+  STANDARD:    { label: '🟢 STANDARD',     wait: 'See within 120 minutes' },
+  NON_URGENT:  { label: '🔵 NON-URGENT',   wait: 'See within 240 minutes' },
+};
+
+function renderPriorityBanner(data) {
+  if (!priorityBanner) return;
+
+  const tier = data.priority_tier;
+  if (!tier) {
+    priorityBanner.classList.add('priority-banner--hidden');
+    return;
+  }
+
+  const info = TIER_DISPLAY[tier] || { label: tier, wait: '' };
+
+  // Apply colour class
+  priorityBanner.className = `priority-banner priority-banner--${tier}`;
+
+  if (priorityTierLabel) priorityTierLabel.textContent = info.label;
+  if (priorityWaitLabel) priorityWaitLabel.textContent = info.wait;
+  if (priorityBasisLabel) {
+    priorityBasisLabel.textContent = data.priority_basis || '';
+  }
+
+  // COPD clarification notice
+  if (copdNotice) {
+    copdNotice.style.display = data.clarification_required ? 'block' : 'none';
+  }
+}
+
+// ── Chest pain safety screen section ─────────────────────────────────────────
+
+function renderChestPainSafety(data) {
+  if (!chestPainSection) return;
+
+  const flags = data.chest_pain_safety_flags || [];
+  const triggered = flags.length > 0
+    || (data.priority_basis && data.priority_basis.includes('Chest pain safety'));
+
+  // Determine whether the screen fired by checking for a non-empty flags array
+  // or a safety-screen entry in next_steps
+  const screenFired = flags.length > 0
+    || (data.next_steps || []).some(s => s.includes('alternative serious diagnosis'));
+
+  if (!screenFired && flags.length === 0) {
+    chestPainSection.style.display = 'none';
+    return;
+  }
+
+  chestPainSection.style.display = '';
+
+  if (chestPainFlagsList) chestPainFlagsList.innerHTML = '';
+
+  if (flags.length > 0) {
+    if (chestPainNote) {
+      chestPainNote.textContent =
+        'Red flag features detected — alternative serious diagnoses not excluded. ' +
+        'Clinician review required.';
+    }
+    for (const flag of flags) {
+      const li = document.createElement('li');
+      li.className = 'chest-pain-flag-item';
+      li.textContent = flag;
+      if (chestPainFlagsList) chestPainFlagsList.appendChild(li);
+    }
+  } else {
+    if (chestPainNote) {
+      chestPainNote.textContent =
+        'PE risk is LOW and no red flag features for alternative diagnoses were detected ' +
+        'in the clinical note. Full cardiac workup still recommended — ' +
+        'chest pain is never truly low risk without investigation.';
+    }
+  }
+}
+
 // ── Main result renderer ──────────────────────────────────────────────────────
 
 function renderResult(data) {
@@ -328,11 +426,17 @@ function renderResult(data) {
   btnSaveDecision.disabled = false;
   btnSaveDecision.textContent = 'Save Decision';
 
+  // Priority banner (Tier 1) — shown above everything else
+  renderPriorityBanner(data);
+
   // Section 1
   renderEntityContributions(data.entity_contributions || []);
 
   // Section 2
   renderVitalsFlags(data.vitals_flags || []);
+
+  // Section 2b — chest pain safety screen
+  renderChestPainSafety(data);
 
   // Section 3
   renderRiskBadge(data.risk_level);
@@ -670,6 +774,10 @@ clearBtn.addEventListener('click', () => {
     const el = document.getElementById(htmlId);
     if (el) el.value = '';
   }
+  // Reset new priority fields
+  if (copdSelect) copdSelect.value = '';
+  if (priorityBanner) priorityBanner.classList.add('priority-banner--hidden');
+  if (chestPainSection) chestPainSection.style.display = 'none';
   resultsSection.classList.add('results-hidden');
   clearError();
   noteTextarea.removeAttribute('data-case-label');

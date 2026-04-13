@@ -26,3 +26,17 @@ VITAL_THRESHOLDS: dict[str, list[ThresholdEntry]] = {
     # systolic_bp and diastolic_bp are handled together in scorer.py
     # temperature and gcs are not scored for PE
 }
+
+# ── Layer 1 escalation thresholds (used by escalation_rules.py only) ─────────
+# These constants drive the MTS-derived hard escalators and are NOT part of
+# the PE risk scoring above. The existing VITAL_THRESHOLDS dict is unchanged.
+
+# HR < this value (exclusive) → bradycardia → Very Urgent
+HR_BRADYCARDIA_THRESHOLD: float = 60.0
+
+# SpO2 < this value (exclusive) → severe hypoxia → Immediate
+# Suppressed when known_copd is True (handled in escalation_rules.py).
+SPO2_SEVERE_THRESHOLD: float = 90.0
+
+# RR >= this value (inclusive) → severe tachypnoea → Immediate
+RR_SEVERE_THRESHOLD: float = 25.0
