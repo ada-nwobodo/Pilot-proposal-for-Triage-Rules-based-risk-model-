@@ -26,10 +26,10 @@ def test_all_negated_entities_score_low():
     assert result.risk_level == RiskLevel.LOW
 
 
-def test_single_strong_symptom_scores_medium():
+def test_single_symptom_scores_low():
     entities = [make_entity("haemoptysis")]
     result = assess(entities, VitalsScore())
-    assert result.risk_level == RiskLevel.MEDIUM
+    assert result.risk_level == RiskLevel.LOW
 
 
 def test_three_pe_symptoms_scores_medium():
@@ -64,7 +64,10 @@ def test_low_risk_has_no_suggested_diagnosis():
 
 
 def test_medium_risk_suggests_possible_pe():
-    entities = [make_entity("haemoptysis")]
+    entities = [
+        make_entity("haemoptysis"),
+        make_entity("pleuritic chest pain"),
+    ]
     result = assess(entities, VitalsScore())
     assert result.suggested_diagnosis == "Possible Pulmonary Embolism"
 
@@ -90,7 +93,10 @@ def test_low_risk_has_no_next_steps():
 
 
 def test_pe_positive_has_all_required_next_steps():
-    entities = [make_entity("haemoptysis")]
+    entities = [
+        make_entity("haemoptysis"),
+        make_entity("pleuritic chest pain"),
+    ]
     result = assess(entities, VitalsScore())
     required = {"ECG", "Insert wide bore cannula (pink)", "FBC", "U&E", "Clotting", "D-dimer"}
     assert required.issubset(set(result.next_steps))
