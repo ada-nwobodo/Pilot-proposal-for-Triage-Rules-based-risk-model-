@@ -18,15 +18,19 @@ class DecisionPayload(BaseModel):
     risk_level: str
     suggested_diagnosis: Optional[str] = None
     next_steps: list[str] = []
-    decision: str                     # "accept" or "reject"
-    decision_reason: str
+    decision: str                     # "accept" or "reject" (computed from granular fields)
+    decision_reason: str = ""         # optional when both recommendations accepted
     clinician_name: str               # name of the clinician recording the decision
     patient_ref: str = ""             # anonymised internal reference code (no PII)
 
+    # Granular feedback — optional; populated when two-question feedback UI is used
+    priority_tier_agreed: Optional[bool] = None   # did clinician agree with priority tier?
+    next_steps_agreed:    Optional[bool] = None   # did clinician agree with next steps?
+
     # Encounter timing — optional; only present if clinician used Start Encounter
     encounter_start_ts:   Optional[str] = None  # ISO 8601 UTC string
-    encounter_end_ts:     Optional[str] = None  # ISO 8601 UTC string
-    encounter_duration_s: Optional[int] = None  # whole seconds
+    encounter_end_ts:     Optional[str] = None  # ISO 8601 UTC string (frozen at decision click)
+    encounter_duration_s: Optional[int] = None  # whole seconds (start → decision click)
 
     @field_validator("decision")
     @classmethod
@@ -37,9 +41,7 @@ class DecisionPayload(BaseModel):
 
     @field_validator("decision_reason")
     @classmethod
-    def validate_reason_not_empty(cls, v: str) -> str:
-        if not v.strip():
-            raise ValueError("decision_reason must not be empty")
+    def normalise_reason(cls, v: str) -> str:
         return v.strip()
 
     @field_validator("clinician_name")

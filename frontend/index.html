@@ -241,7 +241,7 @@
           <div id="decision-section" class="result-section decision-section">
             <p class="section-title">6 &mdash; Clinical Decision</p>
             <p class="decision-instructions">
-              Review the assessment above and record your clinical decision.
+              Review the assessment above, answer both questions, then document your clinical reasoning.
             </p>
 
             <div class="decision-meta">
@@ -259,13 +259,21 @@
               </div>
             </div>
 
-            <div class="decision-toggle-group" role="group" aria-label="Clinical decision">
-              <button type="button" id="btn-accept" class="btn btn-decision" data-decision="accept">
-                Accept recommendation
-              </button>
-              <button type="button" id="btn-reject" class="btn btn-decision" data-decision="reject">
-                Reject recommendation
-              </button>
+            <div class="decision-feedback-group">
+              <div class="feedback-row">
+                <span class="feedback-question">Did you agree with the <strong>priority tier</strong>?</span>
+                <div class="feedback-btns" role="group" aria-label="Priority tier feedback">
+                  <button type="button" id="btn-priority-yes" class="btn btn-feedback">&#10003; Yes</button>
+                  <button type="button" id="btn-priority-no"  class="btn btn-feedback">&#10007; No</button>
+                </div>
+              </div>
+              <div class="feedback-row">
+                <span class="feedback-question">Did you agree with the <strong>recommended next steps</strong>?</span>
+                <div class="feedback-btns" role="group" aria-label="Next steps feedback">
+                  <button type="button" id="btn-steps-yes" class="btn btn-feedback">&#10003; Yes</button>
+                  <button type="button" id="btn-steps-no"  class="btn btn-feedback">&#10007; No</button>
+                </div>
+              </div>
             </div>
 
             <div id="decision-reason-wrap" class="decision-reason-wrap" style="display:none;">

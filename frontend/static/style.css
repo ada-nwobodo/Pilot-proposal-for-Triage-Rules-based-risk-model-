@@ -1516,3 +1516,63 @@ input[type="date"]:focus {
   color: #166534;
   line-height: 1.5;
 }
+
+/* ── Decision feedback buttons (two-question UI) ─────────────────────────── */
+
+.decision-feedback-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin-bottom: 1rem;
+}
+
+.feedback-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.6rem 0.85rem;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.5rem;
+}
+
+.feedback-question {
+  font-size: 0.9rem;
+  color: #1f2937;
+  flex: 1;
+}
+
+.feedback-btns {
+  display: flex;
+  gap: 0.4rem;
+  flex-shrink: 0;
+}
+
+.btn-feedback {
+  padding: 0.3rem 0.85rem;
+  font-size: 0.85rem;
+  font-weight: 500;
+  border-radius: 0.375rem;
+  border: 1.5px solid #d1d5db;
+  background: #fff;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+  color: #374151;
+}
+
+.btn-feedback:hover {
+  border-color: #6b7280;
+}
+
+.btn-feedback--active-yes {
+  background: #16a34a;
+  border-color: #16a34a;
+  color: #fff;
+}
+
+.btn-feedback--active-no {
+  background: #dc2626;
+  border-color: #dc2626;
+  color: #fff;
+}

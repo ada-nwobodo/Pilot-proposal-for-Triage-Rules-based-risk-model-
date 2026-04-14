@@ -78,8 +78,8 @@ async def save_decision(payload: DecisionPayload) -> dict:
     study_code = generate_study_code()
 
     row = {
-        **payload.model_dump(),
-        "patient_ref": study_code,          # overwrite whatever the client sent
+        **payload.model_dump(exclude_none=True),  # omit null optional fields (e.g. new granular feedback cols)
+        "patient_ref": study_code,                # overwrite whatever the client sent
         "created_at":  datetime.now(timezone.utc).isoformat(),
     }
 
