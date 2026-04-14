@@ -130,84 +130,57 @@ def map_priority(
     """
     reasons: list[str] = []
 
-    # ── Step 1: Base tier from existing PE risk level ─────────────────────────
-    # NOTE: PE risk score alone does not determine IMMEDIATE priority.
-    # IMMEDIATE is reserved for objective vital sign emergencies (Layer 1).
-    # CRITICAL PE risk maps to URGENT; vital sign escalators raise it further
-    # if haemodynamic shock, respiratory compromise, or reduced GCS are present.
+    # ── Step 1: Base tier from PE risk level (silent — not shown in banner) ───
+    # The banner displays only objective vital sign and symptom triggers.
+    # PE risk level is already shown in the results section below the banner.
     if risk_level == RiskLevel.CRITICAL:
         tier = "URGENT"
-        reasons.append("PE risk CRITICAL — Urgent (60 min) base; escalated by vital signs if applicable.")
     elif risk_level == RiskLevel.HIGH:
         tier = "VERY_URGENT"
-        reasons.append("PE risk HIGH — Very Urgent (10 min).")
     elif risk_level == RiskLevel.MEDIUM:
         tier = "URGENT"
-        reasons.append("PE risk MEDIUM — Urgent (60 min).")
     else:
         # LOW risk
-        if combined_score >= 1:
-            tier = "STANDARD"
-            reasons.append("PE risk LOW with clinical feature(s) — Standard (120 min).")
-        else:
-            tier = "NON_URGENT"
-            reasons.append("PE risk LOW, no features detected — Non-Urgent (240 min).")
+        tier = "STANDARD" if combined_score >= 1 else "NON_URGENT"
 
     # ── Step 2: Layer 1 — vital sign hard escalators ──────────────────────────
     if escalation.triggered and escalation.priority_tier:
-        before = tier
         tier = _higher(tier, escalation.priority_tier)
-        if tier != before:
-            reasons.append(f"Vital escalator raised tier: {escalation.priority_basis}")
-        else:
-            reasons.append(f"Vital escalator confirmed tier: {escalation.priority_basis}")
+        reasons.append(escalation.priority_basis)
 
     # ── Step 3: Layer 2 — symptom floor ──────────────────────────────────────
     if symptom_flags.triggered:
         if symptom_flags.priority_floor:
-            before = tier
             tier = _higher(tier, symptom_flags.priority_floor)
-            if tier != before:
-                reasons.append(
-                    f"Symptom flag raised tier: {symptom_flags.priority_basis}"
-                )
-            else:
-                reasons.append(
-                    f"Symptom flag confirmed tier: {symptom_flags.priority_basis}"
-                )
+            reasons.append(symptom_flags.priority_basis)
         if symptom_flags.dvt_chest_combo_detected:
             before = tier
             tier = _bump(tier)
             if tier != before:
                 reasons.append(
-                    "DVT signs combined with chest/respiratory symptoms — "
-                    f"tier bumped from {before} to {tier}."
+                    "DVT signs combined with chest/respiratory symptoms detected."
                 )
 
     # ── Step 4: Chest pain safety floor ──────────────────────────────────────
     if chest_pain_safety.screen_triggered:
         floor = chest_pain_safety.recommended_priority_floor or "STANDARD"
-        before = tier
         tier = _higher(tier, floor)
         if chest_pain_safety.red_flags_detected:
             flag_summary = "; ".join(chest_pain_safety.red_flags_detected)
-            if tier != before:
-                reasons.append(
-                    f"Chest pain safety screen raised tier to {tier}: "
-                    f"red flags detected — {flag_summary}."
-                )
-            else:
-                reasons.append(
-                    f"Chest pain safety screen: red flags detected — {flag_summary}."
-                )
+            reasons.append(
+                f"Chest pain safety screen: red flags detected — {flag_summary}."
+            )
         else:
-            if tier != before:
-                reasons.append(
-                    "Chest pain safety screen enforced minimum Standard: "
-                    "no red flags detected but chest pain present."
-                )
+            reasons.append(
+                "Chest pain safety screen: no red flags detected but chest pain present."
+            )
 
-    # ── Assemble final output ─────────────────────────────────────────────────
+    # ── Assemble final output — number each trigger for readability ───────────
+    if reasons:
+        numbered_basis = " ".join(f"{i + 1}. {r}" for i, r in enumerate(reasons))
+    else:
+        numbered_basis = "No objective escalation triggers detected."
+
     wait, colour = _tier_meta(tier)
 
     # Next steps override: chest pain safety screen result takes precedence
@@ -222,7 +195,7 @@ def map_priority(
         priority_tier=tier,
         max_wait_minutes=wait,
         priority_colour=colour,
-        priority_basis=" ".join(reasons),
+        priority_basis=numbered_basis,
         clarification_required=escalation.clarification_required,
         clarification_question=escalation.clarification_question,
         chest_pain_safety_flags=chest_pain_safety.red_flags_detected,
