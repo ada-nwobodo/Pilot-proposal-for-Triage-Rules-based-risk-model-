@@ -25,6 +25,8 @@ SYNONYM_GROUPS: dict[str, set[str]] = {
         "haemoptysis",
         "hemoptysis",
         "coughing up blood",
+        "coughing blood",
+        "spitting blood",
         "blood in sputum",
     },
     # Collapse, syncope, faint, dizziness = 1 feature

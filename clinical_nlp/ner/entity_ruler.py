@@ -43,7 +43,11 @@ PE_SYMPTOM_PATTERNS = [
     {"label": "PE_SYMPTOM", "pattern": [
         {"LOWER": "coughing"}, {"LOWER": "up"}, {"LOWER": "blood"}]},
     {"label": "PE_SYMPTOM", "pattern": [
+        {"LOWER": "coughing"}, {"LOWER": "blood"}]},
+    {"label": "PE_SYMPTOM", "pattern": [
         {"LOWER": "blood"}, {"LOWER": "in"}, {"LOWER": "sputum"}]},
+    {"label": "PE_SYMPTOM", "pattern": [
+        {"LOWER": "spitting"}, {"LOWER": "blood"}]},
 
     # ── Collapse / syncope ────────────────────────────────────────────────────
     {"label": "PE_SYMPTOM", "pattern": [{"LOWER": "collapse"}]},
