@@ -1,20 +1,31 @@
 """Layer 1 — Vital signs hard escalators.
 
 Applies MTS-derived priority escalation rules based on objective vital sign
-readings. Rules are evaluated in order; the first matching rule determines the
-output (highest-severity match wins by placement order).
+readings. Rules are evaluated in priority order; IMMEDIATE rules are checked
+before VERY URGENT rules.
 
-This module is entirely independent of the existing PE risk scorer. It reads
-VitalSigns and returns an EscalationResult that is later consumed by
-priority_mapper.py. The existing VITAL_THRESHOLDS / scorer.py pipeline is
-not affected in any way.
+IMMEDIATE triggers (the only three categories):
+  1. Unconscious / Unresponsive  — GCS <= 8
+  2. Haemodynamic shock          — hypotension (SBP<=90 or DBP<=60) + HR > 120
+  3. Respiratory Compromise      — SpO2 < 85%  OR  RR >= 35  OR  RR < 10
 
-COPD clarification gate
------------------------
-When SpO2 < SPO2_SEVERE_THRESHOLD and known_copd is None (not answered),
-the rule still defaults to IMMEDIATE for safety, but also sets
-clarification_required=True so the frontend can prompt the nurse.
-If known_copd is True the severe SpO2 rule is suppressed entirely.
+VERY URGENT triggers:
+  4. Severe hypoxia              — SpO2 85–89%  (COPD annotation if applicable)
+  5. Moderate tachypnoea         — RR 25–34
+  6. Combined hypoxia+tachypnoea — SpO2 <= 93% AND RR >= 22
+  7. Tachycardia alone           — HR >= 120
+  8. Bradycardia alone           — HR < 60
+
+COPD clarification gate (SpO2 85–89% only)
+------------------------------------------
+SpO2 < 85% is always IMMEDIATE regardless of COPD status.
+SpO2 85–89%:
+  known_copd True  → VERY URGENT + context note (may be patient's baseline)
+  known_copd None  → VERY URGENT + clarification_required=True
+  known_copd False → VERY URGENT, no annotation
+
+This module is entirely independent of the existing PE risk scorer.
+The existing VITAL_THRESHOLDS / scorer.py pipeline is not affected.
 """
 from __future__ import annotations
 from dataclasses import dataclass
@@ -22,15 +33,22 @@ from typing import Optional
 
 from clinical_nlp.schemas.input import VitalSigns
 from clinical_nlp.vitals.thresholds import (
+    HR_SHOCK_THRESHOLD,
     HR_BRADYCARDIA_THRESHOLD,
+    SPO2_CRITICAL_THRESHOLD,
     SPO2_SEVERE_THRESHOLD,
-    RR_SEVERE_THRESHOLD,
+    RR_IMMEDIATE_THRESHOLD,
+    RR_DEPRESSION_THRESHOLD,
+    RR_VU_THRESHOLD,
+    GCS_IMMEDIATE_THRESHOLD,
 )
 
-# ── Priority tier constants (shared with priority_mapper.py) ─────────────────
+# ── Priority tier constants ───────────────────────────────────────────────────
 IMMEDIATE   = "IMMEDIATE"    # 0 min  — RED
 VERY_URGENT = "VERY_URGENT"  # 10 min — ORANGE
 URGENT      = "URGENT"       # 60 min — YELLOW
+
+_ESCALATE_NOW = "IMMEDIATE: escalate immediately to a senior doctor."
 
 
 @dataclass
@@ -44,11 +62,11 @@ class EscalationResult:
     """IMMEDIATE | VERY_URGENT | URGENT, or None if no escalator fired."""
 
     priority_basis: str = ""
-    """Human-readable explanation of which rule triggered and why."""
+    """Human-readable explanation of which rule triggered, including the
+    exact recorded vital sign values."""
 
     clarification_required: bool = False
-    """True when SpO2 <90% but known_copd has not been answered (None).
-    The system defaults to IMMEDIATE for safety but asks the nurse to confirm."""
+    """True when SpO2 is 85–89% and known_copd has not been answered (None)."""
 
     clarification_question: Optional[str] = None
     """Populated when clarification_required is True."""
@@ -57,8 +75,8 @@ class EscalationResult:
 def apply_escalation_rules(vitals: Optional[VitalSigns]) -> EscalationResult:
     """Evaluate Layer 1 hard escalators against the supplied vital signs.
 
-    Rules are tested in priority order. The first rule that fires is returned.
-    If vitals is None or all readings are absent, no escalation is triggered.
+    IMMEDIATE rules are checked first (GCS → shock → SpO2 → RR).
+    VERY URGENT rules follow. The first matching rule is returned.
 
     Args:
         vitals: VitalSigns object from the clinical input (may be None).
@@ -69,71 +87,139 @@ def apply_escalation_rules(vitals: Optional[VitalSigns]) -> EscalationResult:
     if vitals is None:
         return EscalationResult(triggered=False)
 
-    hr  = vitals.heart_rate
-    sbp = vitals.systolic_bp
-    dbp = vitals.diastolic_bp
-    rr  = vitals.respiratory_rate
-    sp  = vitals.spo2
+    hr         = vitals.heart_rate
+    sbp        = vitals.systolic_bp
+    dbp        = vitals.diastolic_bp
+    rr         = vitals.respiratory_rate
+    sp         = vitals.spo2
+    gcs        = vitals.gcs
     known_copd = vitals.known_copd
 
-    # ── Rule 1: Circulatory compromise — hypotension + tachycardia ───────────
-    hypotensive = (sbp is not None and sbp <= 90) or (dbp is not None and dbp <= 60)
-    tachycardic = hr is not None and hr > 100
-    if hypotensive and tachycardic:
+    # ══════════════════════════════════════════════════════════════════════════
+    # IMMEDIATE RULES
+    # ══════════════════════════════════════════════════════════════════════════
+
+    # Rule 1 — Unconscious / Unresponsive: GCS <= 8
+    if gcs is not None and gcs <= GCS_IMMEDIATE_THRESHOLD:
+        return EscalationResult(
+            triggered=True,
+            priority_tier=IMMEDIATE,
+            priority_basis=(
+                f"Unconscious/Unresponsive: GCS {gcs} "
+                f"(threshold \u2264{GCS_IMMEDIATE_THRESHOLD}) \u2014 {_ESCALATE_NOW}"
+            ),
+        )
+
+    # Rule 2 — Haemodynamic shock: hypotension + HR > 120
+    hypotensive       = (sbp is not None and sbp <= 90) or (dbp is not None and dbp <= 60)
+    tachycardic_shock = hr is not None and hr > HR_SHOCK_THRESHOLD
+    if hypotensive and tachycardic_shock:
         bp_part = (
-            f"SBP {sbp} mmHg" if sbp is not None and sbp <= 90
-            else f"DBP {dbp} mmHg"
+            f"SBP {int(sbp)}mmHg" if sbp is not None and sbp <= 90
+            else f"DBP {int(dbp)}mmHg"
         )
         return EscalationResult(
             triggered=True,
             priority_tier=IMMEDIATE,
             priority_basis=(
-                f"Circulatory compromise: hypotension ({bp_part}) combined with "
-                f"tachycardia (HR {hr} bpm) — Immediate (0 min)."
+                f"Haemodynamic shock: {bp_part} + HR {int(hr)}bpm "
+                f"(threshold HR >{int(HR_SHOCK_THRESHOLD)}) \u2014 {_ESCALATE_NOW}"
             ),
         )
 
-    # ── Rule 2: Severe hypoxia — SpO2 < 90% (COPD conditional) ──────────────
-    if sp is not None and sp < SPO2_SEVERE_THRESHOLD:
+    # Rule 3 — Respiratory Compromise: critical hypoxia SpO2 < 85%
+    # Applied regardless of COPD status — SpO2 < 85% is an emergency for all.
+    if sp is not None and sp < SPO2_CRITICAL_THRESHOLD:
+        return EscalationResult(
+            triggered=True,
+            priority_tier=IMMEDIATE,
+            priority_basis=(
+                f"Respiratory Compromise: SpO\u2082 {sp}% "
+                f"(critical hypoxia \u2014 threshold <{int(SPO2_CRITICAL_THRESHOLD)}%) "
+                f"\u2014 {_ESCALATE_NOW}"
+            ),
+        )
+
+    # Rule 4 — Respiratory Compromise: RR >= 35 (severe tachypnoea)
+    if rr is not None and rr >= RR_IMMEDIATE_THRESHOLD:
+        return EscalationResult(
+            triggered=True,
+            priority_tier=IMMEDIATE,
+            priority_basis=(
+                f"Respiratory Compromise: RR {int(rr)} breaths/min "
+                f"(severe tachypnoea \u2014 threshold \u2265{int(RR_IMMEDIATE_THRESHOLD)}) "
+                f"\u2014 {_ESCALATE_NOW}"
+            ),
+        )
+
+    # Rule 5 — Respiratory Compromise: RR < 10 (respiratory depression)
+    if rr is not None and rr < RR_DEPRESSION_THRESHOLD:
+        return EscalationResult(
+            triggered=True,
+            priority_tier=IMMEDIATE,
+            priority_basis=(
+                f"Respiratory Compromise: RR {int(rr)} breaths/min "
+                f"(respiratory depression \u2014 threshold <{int(RR_DEPRESSION_THRESHOLD)}) "
+                f"\u2014 {_ESCALATE_NOW}"
+            ),
+        )
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # VERY URGENT RULES
+    # ══════════════════════════════════════════════════════════════════════════
+
+    # Rule 6 — Severe hypoxia: SpO2 85–89%
+    # At this point sp >= SPO2_CRITICAL_THRESHOLD (85) is guaranteed.
+    if sp is not None and sp <= SPO2_SEVERE_THRESHOLD:
+        copd_note           = ""
+        needs_clarification = False
+        question            = None
+
         if known_copd is True:
-            # COPD confirmed — severe SpO2 rule suppressed; falls through to
-            # standard combined threshold (Rule 4) if applicable.
-            pass
-        else:
-            # known_copd is False or None — escalate to IMMEDIATE.
-            # If None, also request clarification from the nurse.
-            needs_clarification = known_copd is None
+            copd_note = (
+                " Note: known COPD — consider whether "
+                f"SpO\u2082 {sp}% represents this patient's usual baseline "
+                "before escalating further."
+            )
+        elif known_copd is None:
+            needs_clarification = True
+            copd_note = " COPD status not confirmed — please clarify with nurse."
             question = (
                 f"SpO\u2082 recorded as {sp}%. "
                 "Does this patient have a known diagnosis of COPD?\n"
                 "\u2610 Yes \u2014 known COPD\n"
                 "\u2610 No / Not known"
-            ) if needs_clarification else None
-            return EscalationResult(
-                triggered=True,
-                priority_tier=IMMEDIATE,
-                priority_basis=(
-                    f"Severe hypoxia: SpO\u2082 {sp}% (threshold <{SPO2_SEVERE_THRESHOLD}%) "
-                    "— Immediate (0 min)."
-                    + (" COPD status unconfirmed — defaulting to Immediate for safety."
-                       if needs_clarification else "")
-                ),
-                clarification_required=needs_clarification,
-                clarification_question=question,
             )
 
-    # ── Rule 3: Severe tachypnoea — RR ≥ 25 ─────────────────────────────────
-    if rr is not None and rr >= RR_SEVERE_THRESHOLD:
         return EscalationResult(
             triggered=True,
-            priority_tier=IMMEDIATE,
+            priority_tier=VERY_URGENT,
             priority_basis=(
-                f"Severe tachypnoea: RR {rr} breaths/min "
-                f"(threshold \u2265{RR_SEVERE_THRESHOLD}) — Immediate (0 min)."
+                f"Respiratory Compromise: SpO\u2082 {sp}% "
+                f"(severe hypoxia \u2014 range {int(SPO2_CRITICAL_THRESHOLD)}"
+                f"\u2013{int(SPO2_SEVERE_THRESHOLD)}%) "
+                f"\u2014 Very Urgent (10 min).{copd_note}"
+            ),
+            clarification_required=needs_clarification,
+            clarification_question=question,
+        )
+
+    # Rule 7 — Moderate tachypnoea: RR 25–34
+    # At this point rr < RR_IMMEDIATE_THRESHOLD (35) and rr >= RR_DEPRESSION_THRESHOLD (10)
+    # are both guaranteed.
+    if rr is not None and rr >= RR_VU_THRESHOLD:
+        return EscalationResult(
+            triggered=True,
+            priority_tier=VERY_URGENT,
+            priority_basis=(
+                f"Respiratory Compromise: RR {int(rr)} breaths/min "
+                f"(moderate tachypnoea \u2014 range "
+                f"{int(RR_VU_THRESHOLD)}\u2013{int(RR_IMMEDIATE_THRESHOLD) - 1}) "
+                "\u2014 Very Urgent (10 min)."
             ),
         )
 
-    # ── Rule 4: Combined SpO2 ≤ 93% + RR ≥ 22 ───────────────────────────────
+    # Rule 8 — Combined hypoxia + tachypnoea: SpO2 <= 93% AND RR >= 22
     hypoxic_combined     = sp is not None and sp <= 93
     tachypnoeic_combined = rr is not None and rr >= 22
     if hypoxic_combined and tachypnoeic_combined:
@@ -141,29 +227,31 @@ def apply_escalation_rules(vitals: Optional[VitalSigns]) -> EscalationResult:
             triggered=True,
             priority_tier=VERY_URGENT,
             priority_basis=(
-                f"Respiratory compromise: SpO\u2082 {sp}% and RR {rr} breaths/min "
-                "— Very Urgent (10 min)."
+                f"Respiratory Compromise: SpO\u2082 {sp}% and RR {int(rr)} breaths/min "
+                "(combined hypoxia + tachypnoea) \u2014 Very Urgent (10 min)."
             ),
         )
 
-    # ── Rule 5: Tachycardia alone — HR > 100 ─────────────────────────────────
-    if tachycardic:
+    # Rule 9 — Tachycardia alone: HR >= 120
+    tachycardic_vu = hr is not None and hr >= HR_SHOCK_THRESHOLD
+    if tachycardic_vu:
         return EscalationResult(
             triggered=True,
             priority_tier=VERY_URGENT,
             priority_basis=(
-                f"Tachycardia: HR {hr} bpm (threshold >100) — Very Urgent (10 min)."
+                f"Tachycardia: HR {int(hr)}bpm "
+                f"(threshold \u2265{int(HR_SHOCK_THRESHOLD)}) \u2014 Very Urgent (10 min)."
             ),
         )
 
-    # ── Rule 6: Bradycardia alone — HR < 60 ──────────────────────────────────
+    # Rule 10 — Bradycardia alone: HR < 60
     if hr is not None and hr < HR_BRADYCARDIA_THRESHOLD:
         return EscalationResult(
             triggered=True,
             priority_tier=VERY_URGENT,
             priority_basis=(
-                f"Bradycardia: HR {hr} bpm "
-                f"(threshold <{HR_BRADYCARDIA_THRESHOLD}) — Very Urgent (10 min)."
+                f"Bradycardia: HR {int(hr)}bpm "
+                f"(threshold <{int(HR_BRADYCARDIA_THRESHOLD)}) \u2014 Very Urgent (10 min)."
             ),
         )
 

@@ -31,12 +31,32 @@ VITAL_THRESHOLDS: dict[str, list[ThresholdEntry]] = {
 # These constants drive the MTS-derived hard escalators and are NOT part of
 # the PE risk scoring above. The existing VITAL_THRESHOLDS dict is unchanged.
 
-# HR < this value (exclusive) → bradycardia → Very Urgent
+# ── Heart rate ────────────────────────────────────────────────────────────────
+# HR > this + hypotension → haemodynamic shock → IMMEDIATE
+# HR >= this alone         → tachycardia       → VERY URGENT
+HR_SHOCK_THRESHOLD: float = 120.0
+
+# HR < this alone → bradycardia → VERY URGENT
 HR_BRADYCARDIA_THRESHOLD: float = 60.0
 
-# SpO2 < this value (exclusive) → severe hypoxia → Immediate
-# Suppressed when known_copd is True (handled in escalation_rules.py).
-SPO2_SEVERE_THRESHOLD: float = 90.0
+# ── SpO2 ──────────────────────────────────────────────────────────────────────
+# SpO2 < this (exclusive) → critical hypoxia   → IMMEDIATE (all patients)
+SPO2_CRITICAL_THRESHOLD: float = 85.0
 
-# RR >= this value (inclusive) → severe tachypnoea → Immediate
-RR_SEVERE_THRESHOLD: float = 25.0
+# SpO2 <= this (inclusive, ≥85 guaranteed) → severe hypoxia → VERY URGENT
+# COPD annotation added when known_copd is True; clarification if None.
+SPO2_SEVERE_THRESHOLD: float = 89.0
+
+# ── Respiratory rate ──────────────────────────────────────────────────────────
+# RR >= this → severe tachypnoea     → IMMEDIATE
+RR_IMMEDIATE_THRESHOLD: float = 35.0
+
+# RR < this  → respiratory depression → IMMEDIATE
+RR_DEPRESSION_THRESHOLD: float = 10.0
+
+# RR >= this (< RR_IMMEDIATE_THRESHOLD) → moderate tachypnoea → VERY URGENT
+RR_VU_THRESHOLD: float = 25.0
+
+# ── GCS ───────────────────────────────────────────────────────────────────────
+# GCS <= this → unconscious / unresponsive → IMMEDIATE
+GCS_IMMEDIATE_THRESHOLD: int = 8

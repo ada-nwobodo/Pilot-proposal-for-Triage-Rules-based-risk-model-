@@ -131,9 +131,13 @@ def map_priority(
     reasons: list[str] = []
 
     # ── Step 1: Base tier from existing PE risk level ─────────────────────────
+    # NOTE: PE risk score alone does not determine IMMEDIATE priority.
+    # IMMEDIATE is reserved for objective vital sign emergencies (Layer 1).
+    # CRITICAL PE risk maps to URGENT; vital sign escalators raise it further
+    # if haemodynamic shock, respiratory compromise, or reduced GCS are present.
     if risk_level == RiskLevel.CRITICAL:
-        tier = "IMMEDIATE"
-        reasons.append("PE risk CRITICAL — Immediate (0 min).")
+        tier = "URGENT"
+        reasons.append("PE risk CRITICAL — Urgent (60 min) base; escalated by vital signs if applicable.")
     elif risk_level == RiskLevel.HIGH:
         tier = "VERY_URGENT"
         reasons.append("PE risk HIGH — Very Urgent (10 min).")

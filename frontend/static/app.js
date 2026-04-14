@@ -334,7 +334,7 @@ function renderNextSteps(steps) {
 // ── Priority banner (Tier 1) ──────────────────────────────────────────────────
 
 const TIER_DISPLAY = {
-  IMMEDIATE:   { label: '🔴 IMMEDIATE',    wait: 'See within 0 minutes'   },
+  IMMEDIATE:   { label: '🔴 IMMEDIATE — escalate immediately to a senior doctor', wait: 'See within 0 minutes' },
   VERY_URGENT: { label: '🟠 VERY URGENT',  wait: 'See within 10 minutes'  },
   URGENT:      { label: '🟡 URGENT',       wait: 'See within 60 minutes'  },
   STANDARD:    { label: '🟢 STANDARD',     wait: 'See within 120 minutes' },
