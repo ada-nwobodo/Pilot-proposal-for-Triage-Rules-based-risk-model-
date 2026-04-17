@@ -76,14 +76,22 @@ class EscalationResult:
     """IMMEDIATE | VERY_URGENT | URGENT, or None if no escalator fired."""
 
     priority_basis: str = ""
-    """Human-readable explanation of all rules that triggered, including the
-    exact recorded vital sign values. Multiple triggers are separated by ' | '."""
+    """Combined human-readable explanation of all rules that triggered.
+    Kept for backward compatibility; priority_bases is the canonical list."""
+
+    priority_bases: list = None  # type: ignore[assignment]
+    """One entry per triggered rule. Used by priority_mapper to number each
+    trigger independently in the banner (e.g. 1. Respiratory... 2. Circulatory...)."""
 
     clarification_required: bool = False
     """True when SpO2 is 85–89% and known_copd has not been answered (None)."""
 
     clarification_question: Optional[str] = None
     """Populated when clarification_required is True."""
+
+    def __post_init__(self) -> None:
+        if self.priority_bases is None:
+            self.priority_bases = []
 
 
 def apply_escalation_rules(vitals: Optional[VitalSigns]) -> EscalationResult:
@@ -139,7 +147,7 @@ def apply_escalation_rules(vitals: Optional[VitalSigns]) -> EscalationResult:
             else f"DBP {int(dbp)}mmHg"
         )
         triggered.append((IMMEDIATE, (
-            f"Haemodynamic shock: {bp_part} + HR {int(hr)}bpm "
+            f"Circulatory Compromise: Haemodynamic shock \u2014 {bp_part} + HR {int(hr)}bpm "
             f"(threshold HR >{int(HR_SHOCK_THRESHOLD)}) \u2014 {_ESCALATE_NOW}"
         )))
 
@@ -226,14 +234,14 @@ def apply_escalation_rules(vitals: Optional[VitalSigns]) -> EscalationResult:
     # covers the tachycardia as part of haemodynamic shock.
     if hr is not None and hr >= HR_SHOCK_THRESHOLD and not in_shock:
         triggered.append((VERY_URGENT, (
-            f"Tachycardia: HR {int(hr)}bpm "
+            f"Circulatory Compromise: Tachycardia \u2014 HR {int(hr)}bpm "
             f"(threshold \u2265{int(HR_SHOCK_THRESHOLD)}) \u2014 Very Urgent (10 min)."
         )))
 
     # Rule 10 — Bradycardia alone: HR < 60
     if hr is not None and hr < HR_BRADYCARDIA_THRESHOLD:
         triggered.append((VERY_URGENT, (
-            f"Bradycardia: HR {int(hr)}bpm "
+            f"Circulatory Compromise: Bradycardia \u2014 HR {int(hr)}bpm "
             f"(threshold <{int(HR_BRADYCARDIA_THRESHOLD)}) \u2014 Very Urgent (10 min)."
         )))
 
@@ -244,13 +252,14 @@ def apply_escalation_rules(vitals: Optional[VitalSigns]) -> EscalationResult:
     # ── Highest tier across all triggered rules ───────────────────────────────
     highest_tier = max(triggered, key=lambda x: _TIER_ORDER.get(x[0], 0))[0]
 
-    # ── Combine all basis strings separated by ' | ' ──────────────────────────
-    combined_basis = " | ".join(basis for _, basis in triggered)
+    # ── Individual basis strings — one per trigger, for independent numbering ──
+    bases = [basis for _, basis in triggered]
 
     return EscalationResult(
         triggered=True,
         priority_tier=highest_tier,
-        priority_basis=combined_basis,
+        priority_basis=" | ".join(bases),  # backward-compat combined string
+        priority_bases=bases,              # list used by priority_mapper for numbering
         clarification_required=clarification_required,
         clarification_question=clarification_question,
     )

@@ -144,9 +144,14 @@ def map_priority(
         tier = "STANDARD" if combined_score >= 1 else "NON_URGENT"
 
     # ── Step 2: Layer 1 — vital sign hard escalators ──────────────────────────
+    # Each individual trigger is added separately so the final numbered list
+    # gives every finding its own number (e.g. 1. Respiratory... 2. Circulatory...)
     if escalation.triggered and escalation.priority_tier:
         tier = _higher(tier, escalation.priority_tier)
-        reasons.append(escalation.priority_basis)
+        if escalation.priority_bases:
+            reasons.extend(escalation.priority_bases)
+        elif escalation.priority_basis:
+            reasons.append(escalation.priority_basis)
 
     # ── Step 3: Layer 2 — symptom floor ──────────────────────────────────────
     if symptom_flags.triggered:
