@@ -52,10 +52,8 @@ const nextStepsList       = document.getElementById('next-steps-list');
 // Section 6: Clinical Decision
 const decisionSection     = document.getElementById('decision-section');
 const clinicianNameInput  = document.getElementById('clinician-name');
-const btnPriorityYes      = document.getElementById('btn-priority-yes');
-const btnPriorityNo       = document.getElementById('btn-priority-no');
-const btnStepsYes         = document.getElementById('btn-steps-yes');
-const btnStepsNo          = document.getElementById('btn-steps-no');
+const btnAccept           = document.getElementById('btn-accept');
+const btnRefuse           = document.getElementById('btn-refuse');
 const decisionReasonWrap  = document.getElementById('decision-reason-wrap');
 const decisionReasonLabel = document.getElementById('decision-reason-label');
 const decisionReasonInput = document.getElementById('decision-reason');
@@ -102,11 +100,10 @@ let exampleIndex          = 0;
 let cachedExamples        = null;
 let _lastResult           = null;   // most recent /assess API response
 let _lastNoteText         = null;   // clinical note text used for the last analysis
-let _pendingDecision      = null;   // { decision, decision_reason } — ready for Supabase
-let _encounterStartTime   = null;   // Date when clinician clicked Start Encounter
-let _encounterDecisionTime = null;  // Date frozen at first feedback click (timer end)
-let _priorityAgreed       = null;   // true/false — priority tier feedback
-let _nextStepsAgreed      = null;   // true/false — next steps feedback
+let _pendingDecision       = null;   // saved payload — set after successful POST
+let _encounterStartTime    = null;   // Date when clinician clicked Start Encounter
+let _encounterDecisionTime = null;   // Date frozen at Accept/Refuse click (timer end)
+let _decision              = null;   // 'accept' | 'reject' | null
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -508,47 +505,35 @@ function setDecisionError(msg) {
   }
 }
 
-// Freeze the encounter timer at the moment of the first feedback click
+// Freeze the encounter timer at the moment the clinician clicks Accept or Refuse.
+// This is the clinical decision point — the end of the timed encounter.
 function _freezeTimerOnce() {
   if (_encounterStartTime && !_encounterDecisionTime) {
     _encounterDecisionTime = new Date();
   }
 }
 
-// Update reason textarea label/placeholder based on current feedback state
+// Show/label the reason textarea depending on the current decision
 function _updateReasonField() {
-  const anyDisagreement = _priorityAgreed === false || _nextStepsAgreed === false;
-  const bothAnswered    = _priorityAgreed !== null && _nextStepsAgreed !== null;
-
   decisionReasonWrap.style.display = 'block';
+  if (_decision === null) return;
 
-  if (!bothAnswered) return; // show field early but wait for label update until both answered
-
-  if (anyDisagreement) {
-    const parts = [];
-    if (_priorityAgreed === false)  parts.push('priority tier');
-    if (_nextStepsAgreed === false) parts.push('recommended next steps');
-    decisionReasonLabel.textContent = `Reason for disagreement (required)`;
-    decisionReasonInput.placeholder = `Please explain why you disagreed with the ${parts.join(' and ')}…`;
+  if (_decision === 'reject') {
+    decisionReasonLabel.textContent  = 'Reason for refusal (required)';
+    decisionReasonInput.placeholder  = 'Please explain why you refused the recommendation…';
   } else {
-    decisionReasonLabel.textContent = 'Additional comments (optional)';
-    decisionReasonInput.placeholder = 'Any additional notes…';
+    decisionReasonLabel.textContent  = 'Additional comments (optional)';
+    decisionReasonInput.placeholder  = 'Any additional notes…';
   }
 }
 
-function selectFeedback(type, agreed) {
-  // Freeze timer on very first feedback click
+function selectDecision(decision) {
+  // Timer ends at the moment the clinician makes their Accept/Refuse decision
   _freezeTimerOnce();
 
-  if (type === 'priority') {
-    _priorityAgreed = agreed;
-    btnPriorityYes.className = `btn btn-feedback${agreed  ? ' btn-feedback--active-yes' : ''}`;
-    btnPriorityNo.className  = `btn btn-feedback${!agreed ? ' btn-feedback--active-no'  : ''}`;
-  } else {
-    _nextStepsAgreed = agreed;
-    btnStepsYes.className = `btn btn-feedback${agreed  ? ' btn-feedback--active-yes' : ''}`;
-    btnStepsNo.className  = `btn btn-feedback${!agreed ? ' btn-feedback--active-no'  : ''}`;
-  }
+  _decision = decision;
+  btnAccept.className = `btn btn-feedback${decision === 'accept' ? ' btn-feedback--active-yes' : ''}`;
+  btnRefuse.className = `btn btn-feedback${decision === 'reject' ? ' btn-feedback--active-no'  : ''}`;
 
   _updateReasonField();
   setDecisionError(null);
@@ -557,11 +542,8 @@ function selectFeedback(type, agreed) {
 }
 
 function resetDecision() {
-  _priorityAgreed  = null;
-  _nextStepsAgreed = null;
-  [btnPriorityYes, btnPriorityNo, btnStepsYes, btnStepsNo].forEach(
-    btn => { btn.className = 'btn btn-feedback'; }
-  );
+  _decision = null;
+  [btnAccept, btnRefuse].forEach(btn => { btn.className = 'btn btn-feedback'; });
   decisionReasonInput.value = '';
   decisionReasonWrap.style.display = 'none';
   clinicianNameInput.value = '';
@@ -572,10 +554,8 @@ function resetDecision() {
   _pendingDecision = null;
 }
 
-btnPriorityYes.addEventListener('click', () => selectFeedback('priority', true));
-btnPriorityNo.addEventListener('click',  () => selectFeedback('priority', false));
-btnStepsYes.addEventListener('click',   () => selectFeedback('steps', true));
-btnStepsNo.addEventListener('click',    () => selectFeedback('steps', false));
+btnAccept.addEventListener('click', () => selectDecision('accept'));
+btnRefuse.addEventListener('click', () => selectDecision('reject'));
 
 // ── Event: start encounter ────────────────────────────────────────────────────
 
@@ -617,21 +597,19 @@ btnSaveDecision.addEventListener('click', async () => {
     return;
   }
 
-  if (_priorityAgreed === null || _nextStepsAgreed === null) {
-    setDecisionError('Please answer both questions above before saving.');
+  if (_decision === null) {
+    setDecisionError('Please accept or refuse the recommendation before saving.');
     return;
   }
 
-  const anyDisagreement = _priorityAgreed === false || _nextStepsAgreed === false;
   const reason = decisionReasonInput.value.trim();
-  if (anyDisagreement && !reason) {
-    setDecisionError('Please explain your disagreement before saving.');
+  if (_decision === 'reject' && !reason) {
+    setDecisionError('Please explain your refusal before saving.');
     decisionReasonInput.focus();
     return;
   }
 
-  // Compute overall decision from granular feedback
-  const decision = (_priorityAgreed && _nextStepsAgreed) ? 'accept' : 'reject';
+  const decision = _decision;
 
   // ── Build payload ─────────────────────────────────────────────────────────
   // Use the decision-click time (frozen at first feedback click) as the end time.
@@ -660,9 +638,8 @@ btnSaveDecision.addEventListener('click', async () => {
     decision,
     decision_reason:       reason,
     clinician_name:        clinicianName,
-    priority_tier_agreed:  _priorityAgreed,
-    next_steps_agreed:     _nextStepsAgreed,
     // patient_ref is generated server-side — not sent from the client
+    // priority_tier_agreed / next_steps_agreed collected on the outcome page by reviewing clinician
     // Encounter timing — only included if Start Encounter was clicked
     ...(_encounterStartTime && {
       encounter_start_ts:   _encounterStartTime.toISOString(),

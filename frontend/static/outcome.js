@@ -41,8 +41,16 @@ const outcomeSubmitError      = document.getElementById('outcome-submit-error');
 const btnSubmitOutcome        = document.getElementById('btn-submit-outcome');
 const outcomeSavedMsg         = document.getElementById('outcome-saved-msg');
 
+// Clinician feedback buttons
+const btnTierAgreedYes  = document.getElementById('btn-tier-agreed-yes');
+const btnTierAgreedNo   = document.getElementById('btn-tier-agreed-no');
+const btnStepsAgreedYes = document.getElementById('btn-steps-agreed-yes');
+const btnStepsAgreedNo  = document.getElementById('btn-steps-agreed-no');
+
 // ── State ──────────────────────────────────────────────────────────────────────
-let _assessmentId = null;   // ID of the fetched assessment row
+let _assessmentId    = null;   // ID of the fetched assessment row
+let _tierAgreed      = null;   // true | false | null — priority tier feedback
+let _stepsAgreed     = null;   // true | false | null — next steps feedback
 
 // ── Display helpers ────────────────────────────────────────────────────────────
 
@@ -159,6 +167,13 @@ function renderSummary(row) {
 
   assessmentSummaryCard.style.display = 'block';
   outcomeFormCard.style.display       = 'block';
+
+  // Reset clinician feedback buttons for fresh lookup
+  _tierAgreed  = null;
+  _stepsAgreed = null;
+  [btnTierAgreedYes, btnTierAgreedNo, btnStepsAgreedYes, btnStepsAgreedNo].forEach(
+    btn => { if (btn) btn.className = 'btn btn-feedback'; }
+  );
 }
 
 // ── Lookup handler ─────────────────────────────────────────────────────────────
@@ -215,6 +230,25 @@ lookupRefInput.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') btnLookup.click();
 });
 
+// ── Clinician feedback button handlers ────────────────────────────────────────
+
+function selectTierFeedback(agreed) {
+  _tierAgreed = agreed;
+  if (btnTierAgreedYes) btnTierAgreedYes.className = `btn btn-feedback${agreed  ? ' btn-feedback--active-yes' : ''}`;
+  if (btnTierAgreedNo)  btnTierAgreedNo.className  = `btn btn-feedback${!agreed ? ' btn-feedback--active-no'  : ''}`;
+}
+
+function selectStepsFeedback(agreed) {
+  _stepsAgreed = agreed;
+  if (btnStepsAgreedYes) btnStepsAgreedYes.className = `btn btn-feedback${agreed  ? ' btn-feedback--active-yes' : ''}`;
+  if (btnStepsAgreedNo)  btnStepsAgreedNo.className  = `btn btn-feedback${!agreed ? ' btn-feedback--active-no'  : ''}`;
+}
+
+if (btnTierAgreedYes)  btnTierAgreedYes.addEventListener('click',  () => selectTierFeedback(true));
+if (btnTierAgreedNo)   btnTierAgreedNo.addEventListener('click',   () => selectTierFeedback(false));
+if (btnStepsAgreedYes) btnStepsAgreedYes.addEventListener('click', () => selectStepsFeedback(true));
+if (btnStepsAgreedNo)  btnStepsAgreedNo.addEventListener('click',  () => selectStepsFeedback(false));
+
 // ── Outcome submit handler ─────────────────────────────────────────────────────
 
 btnSubmitOutcome.addEventListener('click', async () => {
@@ -244,6 +278,10 @@ btnSubmitOutcome.addEventListener('click', async () => {
 
   const notes = outcomeNotesInput.value.trim();
   if (notes) payload.outcome_notes = notes;
+
+  // Include clinician feedback only if answered (optional fields)
+  if (_tierAgreed  !== null) payload.priority_tier_agreed = _tierAgreed;
+  if (_stepsAgreed !== null) payload.next_steps_agreed    = _stepsAgreed;
 
   btnSubmitOutcome.disabled    = true;
   btnSubmitOutcome.textContent = 'Saving…';

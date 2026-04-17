@@ -193,6 +193,42 @@
 
         </div><!-- /outcome-form-grid -->
 
+        <!-- Clinician feedback — completed by reviewing clinician, not triage nurse -->
+        <div class="outcome-feedback-section">
+          <p class="outcome-feedback-heading">
+            Clinician feedback
+            <span class="optional-mark">(optional &mdash; to be completed by the reviewing clinician)</span>
+          </p>
+          <p class="outcome-step-note">
+            These questions are for the clinician who reviewed this case, not the triage nurse.
+            They allow evaluation of how well the engine&rsquo;s triage decisions align with clinical judgement.
+          </p>
+
+          <div class="outcome-feedback-grid">
+
+            <div class="outcome-feedback-field">
+              <span class="outcome-feedback-label">
+                Did the reviewing clinician agree with the <strong>priority tier</strong> assigned?
+              </span>
+              <div class="feedback-btns" role="group" aria-label="Priority tier feedback">
+                <button type="button" id="btn-tier-agreed-yes" class="btn btn-feedback">&#10003; Yes</button>
+                <button type="button" id="btn-tier-agreed-no"  class="btn btn-feedback">&#10007; No</button>
+              </div>
+            </div>
+
+            <div class="outcome-feedback-field">
+              <span class="outcome-feedback-label">
+                Did the reviewing clinician agree with the <strong>recommended next steps</strong>?
+              </span>
+              <div class="feedback-btns" role="group" aria-label="Next steps feedback">
+                <button type="button" id="btn-steps-agreed-yes" class="btn btn-feedback">&#10003; Yes</button>
+                <button type="button" id="btn-steps-agreed-no"  class="btn btn-feedback">&#10007; No</button>
+              </div>
+            </div>
+
+          </div>
+        </div><!-- /outcome-feedback-section -->
+
         <div id="outcome-submit-error" class="outcome-error" role="alert" style="display:none;"></div>
 
         <div class="outcome-actions">

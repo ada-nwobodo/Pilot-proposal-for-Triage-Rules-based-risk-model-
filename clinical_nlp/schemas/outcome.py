@@ -17,10 +17,14 @@ class OutcomePayload(BaseModel):
     outcome_recorded_at is set server-side — never accepted from the client.
     """
 
-    outcome: str                         # "pe_confirmed" | "pe_excluded" | "alternative_diagnosis" | "inconclusive"
-    confirming_test: Optional[str] = None  # one of _ALLOWED_TESTS, or None
-    outcome_date: Optional[str] = None   # ISO date "YYYY-MM-DD", or None
-    outcome_notes: Optional[str] = None  # free-text, or None
+    outcome: str                              # "pe_confirmed" | "pe_excluded" | "alternative_diagnosis" | "inconclusive"
+    confirming_test: Optional[str] = None     # one of _ALLOWED_TESTS, or None
+    outcome_date: Optional[str] = None        # ISO date "YYYY-MM-DD", or None
+    outcome_notes: Optional[str] = None       # free-text, or None
+
+    # Clinician feedback — completed by reviewing clinician on the outcome page, not the triage nurse
+    priority_tier_agreed: Optional[bool] = None  # did reviewing clinician agree with priority tier?
+    next_steps_agreed:    Optional[bool] = None  # did reviewing clinician agree with next steps?
 
     @field_validator("outcome")
     @classmethod

@@ -23,10 +23,6 @@ class DecisionPayload(BaseModel):
     clinician_name: str               # name of the clinician recording the decision
     patient_ref: str = ""             # anonymised internal reference code (no PII)
 
-    # Granular feedback — optional; populated when two-question feedback UI is used
-    priority_tier_agreed: Optional[bool] = None   # did clinician agree with priority tier?
-    next_steps_agreed:    Optional[bool] = None   # did clinician agree with next steps?
-
     # Encounter timing — optional; only present if clinician used Start Encounter
     encounter_start_ts:   Optional[str] = None  # ISO 8601 UTC string
     encounter_end_ts:     Optional[str] = None  # ISO 8601 UTC string (frozen at decision click)
