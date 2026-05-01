@@ -89,27 +89,21 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(
+_fastapi = FastAPI(
     title="Clinical Risk Stratification API",
     description="Rules-based NLP risk engine for clinical triage",
     version="0.1.0",
     lifespan=lifespan,
 )
 
-# ── Basic Auth (demo protection) ──────────────────────────────────────────────
-app.add_middleware(BasicAuthMiddleware)
-
 # ── CORS ──────────────────────────────────────────────────────────────────────
-# Allowed origins come from RISK_ENGINE_ALLOWED_ORIGINS (comma-separated).
-# The production frontend URL is always included as a hardcoded fallback so
-# CORS works even if the env var is not read correctly on a given cold start.
 _origins = list({
     o.strip()
     for o in settings.allowed_origins.split(",")
     if o.strip()
 } | {"https://pilot-frontend.vercel.app"})
 
-app.add_middleware(
+_fastapi.add_middleware(
     CORSMiddleware,
     allow_origins=_origins,
     allow_credentials=False,
@@ -118,18 +112,18 @@ app.add_middleware(
 )
 
 # ── Routes ────────────────────────────────────────────────────────────────────
-app.include_router(health.router)
-app.include_router(assess.router)
-app.include_router(examples.router)
-app.include_router(decisions.router)
+_fastapi.include_router(health.router)
+_fastapi.include_router(assess.router)
+_fastapi.include_router(examples.router)
+_fastapi.include_router(decisions.router)
 
 # ── Frontend static files ─────────────────────────────────────────────────────
 frontend_path = Path(__file__).parent.parent / "frontend"
 if (frontend_path / "static").exists():
-    app.mount("/static", StaticFiles(directory=str(frontend_path / "static")), name="static")
+    _fastapi.mount("/static", StaticFiles(directory=str(frontend_path / "static")), name="static")
 
 
-@app.get("/", include_in_schema=False)
+@_fastapi.get("/", include_in_schema=False)
 async def serve_frontend():
     index = frontend_path / "index.html"
     if index.exists():
@@ -137,12 +131,16 @@ async def serve_frontend():
     return {"message": "Clinical Risk Stratification API", "docs": "/docs"}
 
 
-# ── Runtime config endpoint ────────────────────────────────────────────────────
-# Returns only public-safe values (never the service-role key).
-# The frontend fetches this once on load to discover its runtime config.
-@app.get("/config", include_in_schema=False)
+@_fastapi.get("/config", include_in_schema=False)
 async def get_config():
     return {
         "supabase_url":      supabase_settings.url,
         "supabase_anon_key": supabase_settings.anon_key,
     }
+
+
+# ── Basic Auth wrapper ────────────────────────────────────────────────────────
+# Vercel calls whatever variable is named `app` as the ASGI entry point.
+# Wrapping _fastapi here means every request — before anything else —
+# passes through BasicAuthMiddleware. No middleware registration needed.
+app = BasicAuthMiddleware(_fastapi)
