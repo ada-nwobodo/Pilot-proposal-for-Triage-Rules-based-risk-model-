@@ -1,16 +1,61 @@
 from __future__ import annotations
+import base64
 import logging
+import os
+import secrets
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request
 from pathlib import Path
 from clinical_nlp.pipeline import ClinicalRiskOrchestrator
 from clinical_nlp.config import settings, supabase_settings
 from api.routes import assess, health, examples, decisions
 
 logger = logging.getLogger(__name__)
+
+
+# ── Demo Basic Auth Middleware ─────────────────────────────────────────────────
+# Activated only when the DEMO_PASSWORD environment variable is set.
+# Username defaults to "ycdemo" but can be overridden via DEMO_USERNAME.
+# Set both variables in Vercel Dashboard → Settings → Environment Variables.
+# Leave DEMO_PASSWORD unset for local development (auth is bypassed entirely).
+class BasicAuthMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        demo_password = os.environ.get("DEMO_PASSWORD", "")
+        if not demo_password:
+            # Auth disabled — local development or password not yet configured
+            return await call_next(request)
+
+        demo_username = os.environ.get("DEMO_USERNAME", "ycdemo")
+        authenticated = False
+
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header.startswith("Basic "):
+            try:
+                decoded = base64.b64decode(auth_header[6:]).decode("utf-8")
+                username, _, password = decoded.partition(":")
+                username_ok = secrets.compare_digest(
+                    username.encode("utf-8"), demo_username.encode("utf-8")
+                )
+                password_ok = secrets.compare_digest(
+                    password.encode("utf-8"), demo_password.encode("utf-8")
+                )
+                authenticated = username_ok and password_ok
+            except Exception:
+                pass
+
+        if not authenticated:
+            return Response(
+                content="Authentication required — please enter the demo credentials.",
+                status_code=401,
+                headers={"WWW-Authenticate": 'Basic realm="PE Triage Demo"'},
+            )
+
+        return await call_next(request)
 
 
 @asynccontextmanager
@@ -30,6 +75,9 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan,
 )
+
+# ── Basic Auth (demo protection) ──────────────────────────────────────────────
+app.add_middleware(BasicAuthMiddleware)
 
 # ── CORS ──────────────────────────────────────────────────────────────────────
 # Allowed origins come from RISK_ENGINE_ALLOWED_ORIGINS (comma-separated).
