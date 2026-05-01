@@ -6,10 +6,8 @@ import secrets
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.requests import Request
 from pathlib import Path
 from clinical_nlp.pipeline import ClinicalRiskOrchestrator
 from clinical_nlp.config import settings, supabase_settings
@@ -19,21 +17,33 @@ logger = logging.getLogger(__name__)
 
 
 # ── Demo Basic Auth Middleware ─────────────────────────────────────────────────
-# Activated only when the DEMO_PASSWORD environment variable is set.
-# Username defaults to "ycdemo" but can be overridden via DEMO_USERNAME.
-# Set both variables in Vercel Dashboard → Settings → Environment Variables.
-# Leave DEMO_PASSWORD unset for local development (auth is bypassed entirely).
-class BasicAuthMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request: Request, call_next):
+# Pure ASGI middleware — more reliable than BaseHTTPMiddleware in serverless.
+# Activated only when DEMO_PASSWORD environment variable is set.
+# Username defaults to "ycdemo" — override with DEMO_USERNAME env var.
+# Set both in Vercel Dashboard → Settings → Environment Variables → Production.
+# Leave DEMO_PASSWORD unset for local development (auth bypassed entirely).
+class BasicAuthMiddleware:
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        # Only intercept HTTP requests
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
         demo_password = os.environ.get("DEMO_PASSWORD", "")
         if not demo_password:
-            # Auth disabled — local development or password not yet configured
-            return await call_next(request)
+            # Auth disabled — pass straight through
+            await self.app(scope, receive, send)
+            return
 
         demo_username = os.environ.get("DEMO_USERNAME", "ycdemo")
         authenticated = False
 
-        auth_header = request.headers.get("Authorization", "")
+        headers = {k.lower(): v for k, v in scope.get("headers", [])}
+        auth_header = headers.get(b"authorization", b"").decode("utf-8")
+
         if auth_header.startswith("Basic "):
             try:
                 decoded = base64.b64decode(auth_header[6:]).decode("utf-8")
@@ -48,14 +58,24 @@ class BasicAuthMiddleware(BaseHTTPMiddleware):
             except Exception:
                 pass
 
-        if not authenticated:
-            return Response(
-                content="Authentication required — please enter the demo credentials.",
-                status_code=401,
-                headers={"WWW-Authenticate": 'Basic realm="PE Triage Demo"'},
-            )
+        if authenticated:
+            await self.app(scope, receive, send)
+            return
 
-        return await call_next(request)
+        # Return 401 — browser will show native login dialog
+        await send({
+            "type": "http.response.start",
+            "status": 401,
+            "headers": [
+                [b"www-authenticate", b'Basic realm="PE Triage Demo"'],
+                [b"content-type", b"text/plain; charset=utf-8"],
+                [b"content-length", b"48"],
+            ],
+        })
+        await send({
+            "type": "http.response.body",
+            "body": b"Authentication required. Please enter credentials.",
+        })
 
 
 @asynccontextmanager
