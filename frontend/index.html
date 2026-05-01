@@ -4,6 +4,25 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Pulmonary Embolism Risk Assessment — Triage NLP Engine</title>
+  <!-- Demo access gate — runs before page renders -->
+  <script>
+    (function () {
+      var DEMO_PASSWORD = 'AIKoNiQ2025';   // ← change this to update the demo password
+      if (sessionStorage.getItem('demo_auth') !== '1') {
+        var entered = window.prompt('PE Triage Demo\n\nPlease enter the access password:');
+        if (entered !== DEMO_PASSWORD) {
+          document.documentElement.innerHTML =
+            '<head><meta charset="UTF-8"></head>' +
+            '<body style="font-family:sans-serif;padding:3rem;text-align:center;background:#f8f9fa">' +
+            '<h2 style="color:#c0392b">Access Denied</h2>' +
+            '<p>Please contact AIKoNiQ Health for demo access credentials.</p>' +
+            '</body>';
+          throw new Error('Unauthorised');
+        }
+        sessionStorage.setItem('demo_auth', '1');
+      }
+    })();
+  </script>
   <link rel="stylesheet" href="/static/style.css" />
 </head>
 <body>
