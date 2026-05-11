@@ -9,7 +9,7 @@
 // In production the frontend and backend are separate Vercel projects, so we
 // point directly at the backend URL.  Locally (localhost) API_BASE is empty so
 // all calls go to the same origin (FastAPI serves the frontend).
-const BACKEND_URL = 'https://pilot-backend-zeta.vercel.app';
+const BACKEND_URL = 'https://pe-triage-engine-production.up.railway.app';
 let API_BASE = window.location.hostname === 'pilot-frontend.vercel.app'
   ? BACKEND_URL
   : '';

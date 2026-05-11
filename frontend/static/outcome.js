@@ -6,7 +6,7 @@
 'use strict';
 
 // ── Runtime config ─────────────────────────────────────────────────────────────
-const BACKEND_URL = 'https://pilot-backend-zeta.vercel.app';
+const BACKEND_URL = 'https://pe-triage-engine-production.up.railway.app';
 const API_BASE = window.location.hostname === 'pilot-frontend.vercel.app'
   ? BACKEND_URL
   : '';
