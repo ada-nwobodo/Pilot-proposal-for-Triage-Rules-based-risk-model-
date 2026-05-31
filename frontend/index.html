@@ -66,6 +66,19 @@
               required
             ></textarea>
 
+            <div class="form-field form-field--age">
+              <label for="patient-age">Patient age <span class="not-scored">(years)</span></label>
+              <input
+                type="number"
+                id="patient-age"
+                name="patient_age"
+                placeholder="e.g. 35"
+                min="0"
+                max="130"
+                step="1"
+              />
+            </div>
+
             <div class="form-actions">
               <button type="button" id="load-example-btn" class="btn btn-secondary">
                 Load Example

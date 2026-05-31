@@ -66,6 +66,9 @@ const btnCopyCode             = document.getElementById('btn-copy-code');
 const btnStartEncounter       = document.getElementById('btn-start-encounter');
 const encounterTimingSummary  = document.getElementById('encounter-timing-summary');
 
+// Patient age input
+const patientAgeInput = document.getElementById('patient-age');
+
 // Vital sign input elements
 const vitalInputIds = [
   'heart-rate', 'systolic-bp', 'diastolic-bp',
@@ -151,10 +154,20 @@ function buildPayload() {
   if (copdVal === 'false') vitals['known_copd'] = false;
   // Empty string → not answered → omit field → backend receives null → safe default
 
-  return {
+  const payload = {
     note_text: noteText,
     vitals: Object.keys(vitals).length > 0 ? vitals : null,
   };
+
+  // Include age if entered and valid
+  if (patientAgeInput && patientAgeInput.value !== '') {
+    const ageVal = parseInt(patientAgeInput.value, 10);
+    if (!isNaN(ageVal) && ageVal >= 0 && ageVal <= 130) {
+      payload.age = ageVal;
+    }
+  }
+
+  return payload;
 }
 
 // ── Risk badge ────────────────────────────────────────────────────────────────
@@ -469,6 +482,11 @@ function escapeHtml(str) {
 function populateForm(caseObj) {
   noteTextarea.value = caseObj.note_text || '';
 
+  // Clear and populate age
+  if (patientAgeInput) {
+    patientAgeInput.value = (caseObj.age != null) ? caseObj.age : '';
+  }
+
   for (const htmlId of vitalInputIds) {
     const el = document.getElementById(htmlId);
     if (el) el.value = '';
@@ -782,6 +800,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 clearBtn.addEventListener('click', () => {
   noteTextarea.value = '';
+  if (patientAgeInput) patientAgeInput.value = '';
   for (const htmlId of vitalInputIds) {
     const el = document.getElementById(htmlId);
     if (el) el.value = '';
