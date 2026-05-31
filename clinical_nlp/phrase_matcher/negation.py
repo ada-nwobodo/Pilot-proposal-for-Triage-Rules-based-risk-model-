@@ -6,8 +6,14 @@ from .context_window import scope_broken
 PRE_NEGATION_TRIGGERS = {
     "no", "not", "without", "denies", "deny",
     "absent", "negative", "free", "unlikely",
-    "rules", "ruled",  # "ruled out"
-    "absence",         # "absence of"
+    "rules", "ruled",       # "ruled out"
+    "absence",              # "absence of"
+    # ── UK clinical shorthand ─────────────────────────────────────────────────
+    "nil",                  # "nil haemoptysis", "nil chest pain"
+    "none",                 # "none reported", "none present"
+    "denying",              # "patient denying chest pain"
+    "neg",                  # nursing/ED abbreviation for "negative"
+    "never",                # "never had DVT", "never had PE"
 }
 
 POST_NEGATION_TRIGGERS = {
@@ -19,6 +25,11 @@ PRE_NEGATION_PHRASES = {
     "no evidence of", "no signs of", "no history of",
     "not present", "not observed", "not detected",
     "ruled out", "no evidence",
+    # ── UK clinical shorthand phrases ─────────────────────────────────────────
+    "nil history of",       # "nil history of DVT / PE"
+    "nil evidence of",      # "nil evidence of haemoptysis"
+    "nil complaint of",     # "nil complaint of chest pain"
+    "no complaint of",      # "no complaint of chest pain"
 }
 
 # These look like negations but aren't targeting the entity

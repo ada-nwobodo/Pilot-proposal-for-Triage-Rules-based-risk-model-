@@ -32,6 +32,7 @@ from typing import Optional
 
 from clinical_nlp.schemas.output import RiskLevel, EntityContribution
 from clinical_nlp.rules_engine.entity_scorer import canonical_group
+from clinical_nlp.vitals.scorer import VitalsScore
 
 # ── Priority tier constants ───────────────────────────────────────────────────
 URGENT   = "URGENT"    # 60 min  — YELLOW
@@ -51,6 +52,13 @@ _CARDIAC_PANEL = [
 _CLINICIAN_REVIEW = (
     "Clinician review required — alternative serious diagnosis not excluded"
 )
+
+# ECG-only — used when patient is under 40, chest pain is the sole scored
+# feature, and no red-flag keywords are present in the note.
+_ECG_ONLY = ["ECG"]
+
+# Age threshold below which ECG-only investigations apply (no red flags, sole symptom)
+_YOUNG_PATIENT_AGE_THRESHOLD = 40
 
 # ── Red flag keyword groups ───────────────────────────────────────────────────
 # Each entry: (differential_label, list_of_keyword_phrases)
@@ -166,6 +174,7 @@ def apply_chest_pain_safety(
     note_text: str,
     risk_level: RiskLevel,
     entity_contributions: list[EntityContribution],
+    age: int | None = None,
 ) -> ChestPainSafetyResult:
     """Run the chest pain differential safety screen.
 
@@ -176,10 +185,20 @@ def apply_chest_pain_safety(
     If the screen does not activate, a result with screen_triggered=False is
     returned immediately and nothing downstream is changed.
 
+    Next-steps decision tree (applied in order):
+      1. Red flags detected → full cardiac panel + clinician review (URGENT floor).
+         Age does not modify this path — red flags take precedence.
+      2. No red flags, patient age < 40, chest pain is the sole scored feature
+         → ECG only (STANDARD floor).
+      3. No red flags, age >= 40 or other features present
+         → full cardiac panel (STANDARD floor).
+
     Args:
         note_text:            Cleaned free-text triage note.
         risk_level:           PE risk level from the existing rules engine.
         entity_contributions: Entity list from the existing rules engine.
+        age:                  Patient age in years (optional). When None the
+                              age-specific ECG-only path is not evaluated.
 
     Returns:
         ChestPainSafetyResult.
@@ -205,11 +224,25 @@ def apply_chest_pain_safety(
 
     # ── Build result ─────────────────────────────────────────────────────────
     if detected:
+        # Red flags always trigger the full cardiac panel + clinician review
+        # regardless of age. A young patient with red-flag features still
+        # warrants a full workup.
         steps = _CARDIAC_PANEL + [_CLINICIAN_REVIEW]
         floor = URGENT
+
+    elif (
+        age is not None
+        and age < _YOUNG_PATIENT_AGE_THRESHOLD
+        and _chest_pain_is_sole_feature(entity_contributions)
+    ):
+        # No red flags, patient under 40, chest pain the only scored feature:
+        # ECG is the appropriate initial investigation.
+        steps = list(_ECG_ONLY)
+        floor = STANDARD
+
     else:
-        # No red flags found — all screened causes appear absent from the note.
-        # Still warrant full cardiac workup; never downgrade below STANDARD.
+        # No red flags but age >= 40 or additional features present:
+        # full cardiac screen warranted.
         steps = list(_CARDIAC_PANEL)
         floor = STANDARD
 
@@ -219,3 +252,57 @@ def apply_chest_pain_safety(
         recommended_priority_floor=floor,
         next_steps=steps,
     )
+
+
+def _chest_pain_is_sole_feature(
+    entity_contributions: list[EntityContribution],
+) -> bool:
+    """Return True if every scored (non-negated, non-duplicate) entity
+    belongs to the chest_pain canonical group — i.e. no other symptoms
+    or risk factors contributed to the score."""
+    scored = [ec for ec in entity_contributions if ec.score_contribution == 1.0]
+    return bool(scored) and all(
+        canonical_group(ec.text) == "chest_pain" for ec in scored
+    )
+
+
+def apply_young_tachycardia_rule(
+    risk_level: RiskLevel,
+    entity_contributions: list[EntityContribution],
+    vitals_score: VitalsScore,
+    age: int | None = None,
+) -> list[str] | None:
+    """Return ECG-only next steps when a patient under 40 presents with
+    isolated tachycardia (HR > 100 bpm) and no other symptoms or risk factors.
+
+    Conditions — ALL must be met:
+      1. Patient age is known and under 40 years.
+      2. PE risk level is LOW (tachycardia alone scores 1 point, still LOW).
+      3. No NLP entities contributed to the score (no symptoms / risk factors
+         detected in the free-text note).
+      4. Exactly one vital-sign field is flagged and that field is heart_rate
+         (i.e. tachycardia is the sole abnormal finding).
+
+    Returns:
+        ["ECG"]  if all conditions are met.
+        None     if the rule does not apply (caller leaves next steps unchanged).
+    """
+    # Gate 1: age known and under threshold
+    if age is None or age >= _YOUNG_PATIENT_AGE_THRESHOLD:
+        return None
+
+    # Gate 2: PE risk must be LOW (isolated tachycardia → score 1 → LOW)
+    if risk_level != RiskLevel.LOW:
+        return None
+
+    # Gate 3: no NLP entity scored (no symptoms or risk factors in note)
+    if any(ec.score_contribution == 1.0 for ec in entity_contributions):
+        return None
+
+    # Gate 4: exactly one vitals flag, and it is heart_rate (tachycardia)
+    if len(vitals_score.flagged_fields) != 1:
+        return None
+    if vitals_score.flagged_fields[0][0] != "heart_rate":
+        return None
+
+    return list(_ECG_ONLY)

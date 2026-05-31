@@ -7,12 +7,29 @@ from clinical_nlp.phrase_matcher import AnnotatedEntity
 # here maps to its own group (1 point if present and not negated).
 
 SYNONYM_GROUPS: dict[str, set[str]] = {
-    # All chest-pain variants (including pleuritic, inspiratory) = 1 feature
+    # All chest-pain variants (including pleuritic, inspiratory, tightness,
+    # pressure, heaviness, discomfort) = 1 feature — regardless of which
+    # combination appears in the note, only 1 point is ever awarded.
     "chest_pain": {
         "chest pain",
         "pleuritic chest pain",
         "chest pain worse on inspiration",
         "chest pain worse on breathing in",
+        # Tightness variants
+        "chest tightness",
+        "tight chest",
+        "tightness in chest",
+        "tightness in the chest",
+        # Pressure variants
+        "chest pressure",
+        "pressure in chest",
+        "pressure in the chest",
+        # Heaviness variants
+        "chest heaviness",
+        "heavy chest",
+        "heaviness in chest",
+        # General discomfort
+        "chest discomfort",
     },
     # Shortness of breath and abbreviations = 1 feature
     "shortness_of_breath": {
@@ -40,24 +57,53 @@ SYNONYM_GROUPS: dict[str, set[str]] = {
         "dizzy spells",
         "dizziness",
     },
-    # Lower limb DVT signs — lateralised and non-lateralised = 1 feature
-    # Wildcard-matched texts (e.g. "right leg swelling") are caught by
-    # canonical_group() keyword fallback below.
+    # Lower limb DVT signs — lateralised and non-lateralised = 1 feature.
+    # Wildcard-matched texts (e.g. "R leg pain", "left swollen calf") are
+    # caught by the canonical_group() suffix fallback below.
     "leg_dvt_signs": {
+        # Swelling
         "leg swelling",
         "calf swelling",
-        "leg tenderness",
-        "calf tenderness",
         "right leg swelling",
         "left leg swelling",
         "right calf swelling",
         "left calf swelling",
+        "bilateral leg swelling",
+        "bilateral calf swelling",
+        # Tenderness
+        "leg tenderness",
+        "calf tenderness",
         "right leg tenderness",
         "left leg tenderness",
         "right calf tenderness",
         "left calf tenderness",
-        "bilateral leg swelling",
-        "bilateral calf swelling",
+        # Pain
+        "leg pain",
+        "calf pain",
+        "right leg pain",
+        "left leg pain",
+        "right calf pain",
+        "left calf pain",
+        # Adjective-first swollen
+        "swollen leg",
+        "swollen calf",
+        "right swollen leg",
+        "left swollen leg",
+        "right swollen calf",
+        "left swollen calf",
+        # Hot / warm
+        "hot leg",
+        "warm leg",
+        "hot calf",
+        "warm calf",
+        "hot swollen leg",
+        "hot swollen calf",
+        "warm swollen leg",
+        "warm swollen calf",
+        # Lower limb
+        "lower limb swelling",
+        "lower limb tenderness",
+        "lower limb pain",
     },
     # Personal history of DVT
     "previous_dvt": {
@@ -130,12 +176,26 @@ SYNONYM_GROUPS: dict[str, set[str]] = {
         "long distance driving",
         "long distance drive",
     },
-    # Immobilisation variants = 1 feature
+    # Immobilisation variants = 1 feature.
+    # Recent hospitalisation is included as a proxy for immobility — a patient
+    # who was recently admitted is likely to have had a period of reduced
+    # mobility.  Any combination of these phrases in one note scores only 1 pt.
     "immobilisation": {
         "recent immobilisation",
         "recent immobilization",
         "prolonged immobility",
         "bed rest",
+        # Hospitalisation / admission variants
+        "recent hospitalisation",
+        "recent hospitalization",
+        "recent hospital admission",
+        "recent admission",
+        "recent inpatient admission",
+        "recent inpatient stay",
+        "recently hospitalised",
+        "recently hospitalized",
+        "prolonged hospitalisation",
+        "prolonged hospitalization",
     },
     # Oral contraceptive / hormonal = 1 feature
     "ocp": {
@@ -204,12 +264,29 @@ def canonical_group(entity_text: str) -> str:
     if text.endswith(("surgery", "operation")):
         return "surgery"
 
-    # Lateralised / qualified lower-limb DVT signs
+    # Lateralised / qualified lower-limb DVT signs.
+    # Covers wildcard-matched texts such as "R leg pain", "left swollen calf",
+    # "unilateral leg swelling", "lower limb tenderness" etc.
     for _suffix in (
         "leg swelling",
         "calf swelling",
         "leg tenderness",
         "calf tenderness",
+        "leg pain",
+        "calf pain",
+        "swollen leg",
+        "swollen calf",
+        "hot leg",
+        "warm leg",
+        "hot calf",
+        "warm calf",
+        "hot swollen leg",
+        "hot swollen calf",
+        "warm swollen leg",
+        "warm swollen calf",
+        "limb swelling",        # catches "lower limb swelling"
+        "limb tenderness",      # catches "lower limb tenderness"
+        "limb pain",            # catches "lower limb pain"
     ):
         if text.endswith(_suffix):
             return "leg_dvt_signs"

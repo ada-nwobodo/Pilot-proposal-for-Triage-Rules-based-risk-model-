@@ -12,7 +12,10 @@ from clinical_nlp.schemas.output import RiskAssessment
 # ── New priority layer imports (additive — existing pipeline unchanged) ───────
 from clinical_nlp.vitals.escalation_rules import apply_escalation_rules
 from clinical_nlp.rules_engine.symptom_flags import apply_symptom_flags
-from clinical_nlp.rules_engine.chest_pain_safety import apply_chest_pain_safety
+from clinical_nlp.rules_engine.chest_pain_safety import (
+    apply_chest_pain_safety,
+    apply_young_tachycardia_rule,
+)
 from clinical_nlp.rules_engine.priority_mapper import map_priority
 
 
@@ -54,6 +57,7 @@ class ClinicalRiskOrchestrator:
             note_text=clean_text,
             risk_level=assessment.risk_level,
             entity_contributions=assessment.entity_contributions,
+            age=clinical_input.age,
         )
         priority = map_priority(
             risk_level=assessment.risk_level,
@@ -80,5 +84,18 @@ class ClinicalRiskOrchestrator:
         # Apply next_steps override only when chest pain safety screen fired
         if priority.next_steps_override is not None:
             update["next_steps"] = priority.next_steps_override
+
+        # Young isolated-tachycardia rule — only applies when chest pain safety
+        # screen did NOT fire (chest pain screen takes precedence when both
+        # conditions are theoretically met).
+        if not chest_safety.screen_triggered:
+            young_tachy_steps = apply_young_tachycardia_rule(
+                risk_level=assessment.risk_level,
+                entity_contributions=assessment.entity_contributions,
+                vitals_score=vitals_score,
+                age=clinical_input.age,
+            )
+            if young_tachy_steps is not None:
+                update["next_steps"] = young_tachy_steps
 
         return assessment.model_copy(update=update)

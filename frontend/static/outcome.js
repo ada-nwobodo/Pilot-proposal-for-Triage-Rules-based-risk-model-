@@ -33,6 +33,7 @@ const sumOutcomeDate          = document.getElementById('sum-outcome-date');
 const sumOutcomeRecordedAt    = document.getElementById('sum-outcome-recorded-at');
 
 const outcomeFormCard         = document.getElementById('outcome-form-card');
+const assessorNameInput       = document.getElementById('assessor-name');
 const outcomeDiagnosisSelect  = document.getElementById('outcome-diagnosis');
 const outcomeTestSelect       = document.getElementById('outcome-test');
 const outcomeDateInput        = document.getElementById('outcome-date');
@@ -104,7 +105,7 @@ const OUTCOME_LABELS = {
 const TEST_LABELS = {
   ctpa:               'CTPA',
   vq_scan:            'V/Q scan',
-  d_dimer_negative:   'D-dimer (negative)',
+  d_dimer_negative:   'D-dimer',
   echo:               'Echocardiogram',
   clinical_judgement: 'Clinical judgement',
   other:              'Other',
@@ -256,6 +257,13 @@ btnSubmitOutcome.addEventListener('click', async () => {
   outcomeSavedMsg.style.display = 'none';
 
   // Validate
+  const assessorName = assessorNameInput.value.trim();
+  if (!assessorName) {
+    showSubmitError('Please enter your name before saving.');
+    assessorNameInput.focus();
+    return;
+  }
+
   const outcome = outcomeDiagnosisSelect.value;
   if (!outcome) {
     showSubmitError('Please select a final diagnosis before saving.');
@@ -268,7 +276,7 @@ btnSubmitOutcome.addEventListener('click', async () => {
     return;
   }
 
-  const payload = { outcome };
+  const payload = { outcome, assessor_name: assessorName };
 
   const test = outcomeTestSelect.value;
   if (test) payload.confirming_test = test;

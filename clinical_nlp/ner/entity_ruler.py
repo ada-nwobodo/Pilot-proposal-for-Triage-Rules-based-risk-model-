@@ -12,9 +12,25 @@ from spacy.language import Language
 #   e.g. "recent surgery" and "recent abdominal surgery" both match the same
 #   pattern; "leg swelling" and "right leg swelling" likewise.
 #
+#   Where the wildcard appears as the FIRST token in a pattern it MUST carry
+#   a NOT_IN constraint (_LAT_NOT_IN below) so that negation words such as
+#   "no" and "nil" are never swallowed into the entity span.  Without this,
+#   "no leg swelling" matches as the single entity [no leg swelling], leaving
+#   nothing before the span for the negation detector to act on.
+#
 # Synonym deduplication
 #   entity_scorer.SYNONYM_GROUPS + canonical_group() ensure that different
 #   surface forms of the same clinical feature count as only 1 point.
+
+# Negation words that must never be captured as the optional laterality prefix
+# in lower-limb patterns.  Mirrors PRE_NEGATION_TRIGGERS in negation.py.
+_LAT_NOT_IN: list[str] = [
+    "no", "not", "nil", "none", "without",
+    "denies", "deny", "denying",
+    "neg", "never",
+    "absent", "negative", "free", "unlikely",
+    "absence",
+]
 
 PE_SYMPTOM_PATTERNS = [
     # ── Pleuritic chest pain and variants ────────────────────────────────────
@@ -28,6 +44,34 @@ PE_SYMPTOM_PATTERNS = [
         {"LOWER": "on"}, {"LOWER": "breathing"}, {"LOWER": "in"}]},
     {"label": "PE_SYMPTOM", "pattern": [
         {"LOWER": "chest"}, {"LOWER": "pain"}]},
+
+    # ── Chest tightness, pressure, heaviness, discomfort ─────────────────────
+    # Treated as variants of chest pain — grouped under "chest_pain" canonical
+    # group in entity_scorer.py so they never double-count alongside chest pain.
+    {"label": "PE_SYMPTOM", "pattern": [
+        {"LOWER": "chest"}, {"LOWER": "tightness"}]},
+    {"label": "PE_SYMPTOM", "pattern": [
+        {"LOWER": "tight"}, {"LOWER": "chest"}]},
+    {"label": "PE_SYMPTOM", "pattern": [
+        {"LOWER": "tightness"}, {"LOWER": "in"}, {"LOWER": "chest"}]},
+    {"label": "PE_SYMPTOM", "pattern": [
+        {"LOWER": "tightness"}, {"LOWER": "in"}, {"LOWER": "the"},
+        {"LOWER": "chest"}]},
+    {"label": "PE_SYMPTOM", "pattern": [
+        {"LOWER": "chest"}, {"LOWER": "pressure"}]},
+    {"label": "PE_SYMPTOM", "pattern": [
+        {"LOWER": "pressure"}, {"LOWER": "in"}, {"LOWER": "chest"}]},
+    {"label": "PE_SYMPTOM", "pattern": [
+        {"LOWER": "pressure"}, {"LOWER": "in"}, {"LOWER": "the"},
+        {"LOWER": "chest"}]},
+    {"label": "PE_SYMPTOM", "pattern": [
+        {"LOWER": "chest"}, {"LOWER": "heaviness"}]},
+    {"label": "PE_SYMPTOM", "pattern": [
+        {"LOWER": "heavy"}, {"LOWER": "chest"}]},
+    {"label": "PE_SYMPTOM", "pattern": [
+        {"LOWER": "heaviness"}, {"LOWER": "in"}, {"LOWER": "chest"}]},
+    {"label": "PE_SYMPTOM", "pattern": [
+        {"LOWER": "chest"}, {"LOWER": "discomfort"}]},
 
     # ── Shortness of breath ───────────────────────────────────────────────────
     {"label": "PE_SYMPTOM", "pattern": [
@@ -60,18 +104,73 @@ PE_SYMPTOM_PATTERNS = [
         {"LOWER": "dizzy"}, {"LOWER": "spells"}]},
     {"label": "PE_SYMPTOM", "pattern": [{"LOWER": "dizziness"}]},
 
-    # ── Lower limb DVT signs — optional lateral prefix (right/left/bilateral)
-    # {"OP": "?"} captures 0 or 1 token so "leg swelling", "right leg swelling"
-    # and "left leg swelling" all match.  canonical_group() maps any text ending
-    # in a leg-sign suffix to the "leg_dvt_signs" group so they share 1 point.
+    # ── Lower limb DVT signs — optional lateral prefix (right/left/bilateral/R/L)
+    # The wildcard carries _LAT_NOT_IN so negation words ("no", "nil" etc.)
+    # are never swallowed into the span — they remain in the pre-window where
+    # the negation detector can act on them.
+    # canonical_group() maps any text ending in a leg-sign suffix to the
+    # "leg_dvt_signs" group so all variants share 1 point.
+    #
+    # Swelling and tenderness
     {"label": "PE_SYMPTOM", "pattern": [
-        {"OP": "?"}, {"LOWER": "calf"}, {"LOWER": "swelling"}]},
+        {"OP": "?", "LOWER": {"NOT_IN": _LAT_NOT_IN}},
+        {"LOWER": "calf"}, {"LOWER": "swelling"}]},
     {"label": "PE_SYMPTOM", "pattern": [
-        {"OP": "?"}, {"LOWER": "leg"}, {"LOWER": "swelling"}]},
+        {"OP": "?", "LOWER": {"NOT_IN": _LAT_NOT_IN}},
+        {"LOWER": "leg"}, {"LOWER": "swelling"}]},
     {"label": "PE_SYMPTOM", "pattern": [
-        {"OP": "?"}, {"LOWER": "calf"}, {"LOWER": "tenderness"}]},
+        {"OP": "?", "LOWER": {"NOT_IN": _LAT_NOT_IN}},
+        {"LOWER": "calf"}, {"LOWER": "tenderness"}]},
     {"label": "PE_SYMPTOM", "pattern": [
-        {"OP": "?"}, {"LOWER": "leg"}, {"LOWER": "tenderness"}]},
+        {"OP": "?", "LOWER": {"NOT_IN": _LAT_NOT_IN}},
+        {"LOWER": "leg"}, {"LOWER": "tenderness"}]},
+
+    # Pain — leg pain and calf pain are common clinical descriptions of DVT
+    {"label": "PE_SYMPTOM", "pattern": [
+        {"OP": "?", "LOWER": {"NOT_IN": _LAT_NOT_IN}},
+        {"LOWER": "leg"}, {"LOWER": "pain"}]},
+    {"label": "PE_SYMPTOM", "pattern": [
+        {"OP": "?", "LOWER": {"NOT_IN": _LAT_NOT_IN}},
+        {"LOWER": "calf"}, {"LOWER": "pain"}]},
+
+    # Adjective-first: "swollen leg", "swollen calf", "left swollen calf"
+    {"label": "PE_SYMPTOM", "pattern": [
+        {"OP": "?", "LOWER": {"NOT_IN": _LAT_NOT_IN}},
+        {"LOWER": "swollen"}, {"LOWER": "leg"}]},
+    {"label": "PE_SYMPTOM", "pattern": [
+        {"OP": "?", "LOWER": {"NOT_IN": _LAT_NOT_IN}},
+        {"LOWER": "swollen"}, {"LOWER": "calf"}]},
+
+    # Hot / warm leg or calf — classic DVT inflammatory descriptors
+    {"label": "PE_SYMPTOM", "pattern": [
+        {"OP": "?", "LOWER": {"NOT_IN": _LAT_NOT_IN}},
+        {"LOWER": "hot"}, {"LOWER": "leg"}]},
+    {"label": "PE_SYMPTOM", "pattern": [
+        {"OP": "?", "LOWER": {"NOT_IN": _LAT_NOT_IN}},
+        {"LOWER": "warm"}, {"LOWER": "leg"}]},
+    {"label": "PE_SYMPTOM", "pattern": [
+        {"OP": "?", "LOWER": {"NOT_IN": _LAT_NOT_IN}},
+        {"LOWER": "hot"}, {"LOWER": "calf"}]},
+    {"label": "PE_SYMPTOM", "pattern": [
+        {"OP": "?", "LOWER": {"NOT_IN": _LAT_NOT_IN}},
+        {"LOWER": "warm"}, {"LOWER": "calf"}]},
+    # Combined: "hot swollen leg / calf", "warm swollen leg / calf"
+    {"label": "PE_SYMPTOM", "pattern": [
+        {"LOWER": "hot"}, {"LOWER": "swollen"}, {"LOWER": "leg"}]},
+    {"label": "PE_SYMPTOM", "pattern": [
+        {"LOWER": "hot"}, {"LOWER": "swollen"}, {"LOWER": "calf"}]},
+    {"label": "PE_SYMPTOM", "pattern": [
+        {"LOWER": "warm"}, {"LOWER": "swollen"}, {"LOWER": "leg"}]},
+    {"label": "PE_SYMPTOM", "pattern": [
+        {"LOWER": "warm"}, {"LOWER": "swollen"}, {"LOWER": "calf"}]},
+
+    # Lower limb — two-token prefix means the single wildcard can't handle it
+    {"label": "PE_SYMPTOM", "pattern": [
+        {"LOWER": "lower"}, {"LOWER": "limb"}, {"LOWER": "swelling"}]},
+    {"label": "PE_SYMPTOM", "pattern": [
+        {"LOWER": "lower"}, {"LOWER": "limb"}, {"LOWER": "tenderness"}]},
+    {"label": "PE_SYMPTOM", "pattern": [
+        {"LOWER": "lower"}, {"LOWER": "limb"}, {"LOWER": "pain"}]},
 ]
 
 PE_RISK_FACTOR_PATTERNS = [
@@ -90,9 +189,105 @@ PE_RISK_FACTOR_PATTERNS = [
     {"label": "PE_RISK_FACTOR", "pattern": [
         {"LOWER": "history"}, {"LOWER": "of"}, {"LOWER": "pe"}]},
     {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "history"}, {"LOWER": "of"}, {"LOWER": "vte"}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [
         {"LOWER": "prior"}, {"LOWER": "dvt"}]},
     {"label": "PE_RISK_FACTOR", "pattern": [
         {"LOWER": "prior"}, {"LOWER": "pe"}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "prior"}, {"LOWER": "vte"}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "previous"}, {"LOWER": "vte"}]},
+
+    # ── Temporal date-referenced DVT / PE / VTE ───────────────────────────────
+    # Handles: "DVT in 1994", "PE in 2010", "VTE in 2005", etc.
+    # LIKE_NUM matches any number-like token (years, digits) without
+    # needing to hardcode every possible year.
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "dvt"}, {"LOWER": "in"}, {"LIKE_NUM": True}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "pe"}, {"LOWER": "in"}, {"LIKE_NUM": True}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "vte"}, {"LOWER": "in"}, {"LIKE_NUM": True}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "deep"}, {"LOWER": "vein"}, {"LOWER": "thrombosis"},
+        {"LOWER": "in"}, {"LIKE_NUM": True}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "pulmonary"}, {"LOWER": "embolism"},
+        {"LOWER": "in"}, {"LIKE_NUM": True}]},
+
+    # Handles: "DVT 5 years ago", "PE 2 years ago", "DVT 1 year ago"
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "dvt"}, {"LIKE_NUM": True}, {"LOWER": "years"}, {"LOWER": "ago"}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "dvt"}, {"LIKE_NUM": True}, {"LOWER": "year"}, {"LOWER": "ago"}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "pe"}, {"LIKE_NUM": True}, {"LOWER": "years"}, {"LOWER": "ago"}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "pe"}, {"LIKE_NUM": True}, {"LOWER": "year"}, {"LOWER": "ago"}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "vte"}, {"LIKE_NUM": True}, {"LOWER": "years"}, {"LOWER": "ago"}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "vte"}, {"LIKE_NUM": True}, {"LOWER": "year"}, {"LOWER": "ago"}]},
+
+    # Handles: "DVT last year", "PE last year"
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "dvt"}, {"LOWER": "last"}, {"LOWER": "year"}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "pe"}, {"LOWER": "last"}, {"LOWER": "year"}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "vte"}, {"LOWER": "last"}, {"LOWER": "year"}]},
+
+    # ── Alternative history prefixes ──────────────────────────────────────────
+    # "past DVT / PE / VTE"
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "past"}, {"LOWER": "dvt"}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "past"}, {"LOWER": "pe"}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "past"}, {"LOWER": "vte"}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "past"}, {"LOWER": "deep"}, {"LOWER": "vein"},
+        {"LOWER": "thrombosis"}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "past"}, {"LOWER": "pulmonary"}, {"LOWER": "embolism"}]},
+
+    # "known DVT / PE / VTE" and "known history of ..."
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "known"}, {"LOWER": "dvt"}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "known"}, {"LOWER": "pe"}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "known"}, {"LOWER": "vte"}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "known"}, {"LOWER": "history"}, {"LOWER": "of"},
+        {"LOWER": "dvt"}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "known"}, {"LOWER": "history"}, {"LOWER": "of"},
+        {"LOWER": "pe"}]},
+
+    # "hx DVT / PE / VTE" and "hx of DVT / PE / VTE"
+    # (clinical shorthand for "history of")
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "hx"}, {"LOWER": "dvt"}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "hx"}, {"LOWER": "of"}, {"LOWER": "dvt"}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "hx"}, {"LOWER": "pe"}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "hx"}, {"LOWER": "of"}, {"LOWER": "pe"}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "hx"}, {"LOWER": "vte"}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "hx"}, {"LOWER": "of"}, {"LOWER": "vte"}]},
+
+    # "h/o DVT / PE / VTE" — spaCy tokenises "h/o" as ["h", "/", "o"]
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "h"}, {"LOWER": "/"}, {"LOWER": "o"}, {"LOWER": "dvt"}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "h"}, {"LOWER": "/"}, {"LOWER": "o"}, {"LOWER": "pe"}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "h"}, {"LOWER": "/"}, {"LOWER": "o"}, {"LOWER": "vte"}]},
 
     # ── Family history of DVT / PE ────────────────────────────────────────────
     {"label": "PE_RISK_FACTOR", "pattern": [
@@ -129,6 +324,30 @@ PE_RISK_FACTOR_PATTERNS = [
         {"LOWER": "prolonged"}, {"LOWER": "immobility"}]},
     {"label": "PE_RISK_FACTOR", "pattern": [
         {"LOWER": "bed"}, {"LOWER": "rest"}]},
+
+    # ── Recent hospitalisation / admission (proxy for immobility) ─────────────
+    # Grouped under "immobilisation" canonical group in entity_scorer.py
+    # so they never double-count alongside bed rest or immobilisation.
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "recent"}, {"LOWER": "hospitalisation"}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "recent"}, {"LOWER": "hospitalization"}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "recent"}, {"LOWER": "hospital"}, {"LOWER": "admission"}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "recent"}, {"LOWER": "admission"}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "recent"}, {"LOWER": "inpatient"}, {"LOWER": "admission"}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "recent"}, {"LOWER": "inpatient"}, {"LOWER": "stay"}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "recently"}, {"LOWER": "hospitalised"}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "recently"}, {"LOWER": "hospitalized"}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "prolonged"}, {"LOWER": "hospitalisation"}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "prolonged"}, {"LOWER": "hospitalization"}]},
 
     # Named high-PE-risk procedures (the word "surgery" may not appear)
     {"label": "PE_RISK_FACTOR", "pattern": [{"LOWER": "cholecystectomy"}]},
@@ -212,7 +431,23 @@ PE_RISK_FACTOR_PATTERNS = [
     {"label": "PE_RISK_FACTOR", "pattern": [
         {"LOWER": "hormone"}, {"LOWER": "replacement"}, {"LOWER": "therapy"}]},
 
-    # ── Active cancer / palliation ────────────────────────────────────────────
+    # ── Cancer / malignancy ───────────────────────────────────────────────────
+    # Standalone terms — negation detector handles "no cancer", "no malignancy"
+    {"label": "PE_RISK_FACTOR", "pattern": [{"LOWER": "cancer"}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [{"LOWER": "malignancy"}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [{"LOWER": "carcinoma"}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [{"LOWER": "lymphoma"}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [{"LOWER": "leukaemia"}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [{"LOWER": "leukemia"}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [{"LOWER": "myeloma"}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [{"LOWER": "sarcoma"}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [{"LOWER": "melanoma"}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [{"LOWER": "metastases"}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [{"LOWER": "metastasis"}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "metastatic"}, {"OP": "?"}, {"OP": "?"}]},
+
+    # Active / on treatment (existing patterns retained)
     {"label": "PE_RISK_FACTOR", "pattern": [
         {"LOWER": "cancer"}, {"LOWER": "on"}, {"LOWER": "active"},
         {"LOWER": "treatment"}]},
@@ -228,6 +463,75 @@ PE_RISK_FACTOR_PATTERNS = [
         {"LOWER": "palliative"}, {"LOWER": "treatment"}]},
     {"label": "PE_RISK_FACTOR", "pattern": [{"LOWER": "chemotherapy"}]},
     {"label": "PE_RISK_FACTOR", "pattern": [{"LOWER": "radiotherapy"}]},
+
+    # History prefixes — "history of cancer", "previous malignancy", etc.
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "history"}, {"LOWER": "of"}, {"LOWER": "cancer"}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "history"}, {"LOWER": "of"}, {"LOWER": "malignancy"}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "previous"}, {"LOWER": "cancer"}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "previous"}, {"LOWER": "malignancy"}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "past"}, {"LOWER": "cancer"}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "past"}, {"LOWER": "malignancy"}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "known"}, {"LOWER": "cancer"}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "known"}, {"LOWER": "malignancy"}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "background"}, {"LOWER": "of"}, {"LOWER": "cancer"}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "background"}, {"LOWER": "of"}, {"LOWER": "malignancy"}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "hx"}, {"LOWER": "cancer"}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "hx"}, {"LOWER": "of"}, {"LOWER": "cancer"}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "hx"}, {"LOWER": "malignancy"}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "hx"}, {"LOWER": "of"}, {"LOWER": "malignancy"}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "h"}, {"LOWER": "/"}, {"LOWER": "o"}, {"LOWER": "cancer"}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "h"}, {"LOWER": "/"}, {"LOWER": "o"}, {"LOWER": "malignancy"}]},
+
+    # Named cancer types — cover common presentations without requiring a prefix
+    # (e.g. "breast cancer", "lung cancer", "prostate cancer")
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "breast"}, {"LOWER": "cancer"}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "lung"}, {"LOWER": "cancer"}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "bowel"}, {"LOWER": "cancer"}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "colorectal"}, {"LOWER": "cancer"}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "colon"}, {"LOWER": "cancer"}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "prostate"}, {"LOWER": "cancer"}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "ovarian"}, {"LOWER": "cancer"}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "cervical"}, {"LOWER": "cancer"}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "pancreatic"}, {"LOWER": "cancer"}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "bladder"}, {"LOWER": "cancer"}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "renal"}, {"LOWER": "cancer"}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "kidney"}, {"LOWER": "cancer"}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "thyroid"}, {"LOWER": "cancer"}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "uterine"}, {"LOWER": "cancer"}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "endometrial"}, {"LOWER": "cancer"}]},
+    {"label": "PE_RISK_FACTOR", "pattern": [
+        {"LOWER": "skin"}, {"LOWER": "cancer"}]},
 
     # ── Central venous access ─────────────────────────────────────────────────
     {"label": "PE_RISK_FACTOR", "pattern": [

@@ -25,4 +25,5 @@ class ClinicalInput(BaseModel):
     note_text: str = Field(..., description="Free-text clinical note")
     vitals: Optional[VitalSigns] = None
     patient_id: Optional[str] = None
+    age: Optional[int] = Field(None, description="Patient age in years", ge=0, le=130)
     case_label: Optional[str] = Field(None, description="Ground-truth label for evaluation")

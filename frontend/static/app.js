@@ -592,7 +592,7 @@ btnSaveDecision.addEventListener('click', async () => {
   // ── Validate ──────────────────────────────────────────────────────────────
   const clinicianName = clinicianNameInput.value.trim();
   if (!clinicianName) {
-    setDecisionError('Please enter your name before saving.');
+    setDecisionError('Please enter your initials before saving.');
     clinicianNameInput.focus();
     return;
   }

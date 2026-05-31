@@ -160,6 +160,19 @@
 
         <div class="outcome-form-grid">
 
+          <!-- Assessor name -->
+          <div class="outcome-form-field">
+            <label for="assessor-name">
+              Assessor name <span class="required-mark">*</span>
+            </label>
+            <input
+              type="text"
+              id="assessor-name"
+              placeholder="Name of clinician recording this outcome"
+              autocomplete="off"
+            />
+          </div>
+
           <!-- Final diagnosis -->
           <div class="outcome-form-field">
             <label for="outcome-diagnosis">
@@ -183,7 +196,7 @@
               <option value="">— Select investigation —</option>
               <option value="ctpa">CTPA</option>
               <option value="vq_scan">V/Q scan</option>
-              <option value="d_dimer_negative">D-dimer (negative)</option>
+              <option value="d_dimer_negative">D-dimer</option>
               <option value="echo">Echocardiogram</option>
               <option value="clinical_judgement">Clinical judgement</option>
               <option value="other">Other</option>

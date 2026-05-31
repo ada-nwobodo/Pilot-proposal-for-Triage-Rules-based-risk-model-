@@ -18,6 +18,7 @@ class OutcomePayload(BaseModel):
     """
 
     outcome: str                              # "pe_confirmed" | "pe_excluded" | "alternative_diagnosis" | "inconclusive"
+    assessor_name: Optional[str] = None       # name of the clinician recording the outcome (audit trail)
     confirming_test: Optional[str] = None     # one of _ALLOWED_TESTS, or None
     outcome_date: Optional[str] = None        # ISO date "YYYY-MM-DD", or None
     outcome_notes: Optional[str] = None       # free-text, or None
